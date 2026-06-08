@@ -1,5 +1,5 @@
 /* Service worker — offline app shell + background reminders. Bump CACHE to update. */
-const CACHE = 'anbu-tracker-v6';
+const CACHE = 'anbu-tracker-v7';
 const ASSETS = [
   './', './index.html', './styles.css', './data.js', './foods-db.js', './app.js',
   './manifest.json', './icon.svg',

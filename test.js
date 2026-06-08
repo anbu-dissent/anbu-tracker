@@ -133,6 +133,18 @@ window.__r = (function(){
     // 23) persistence excludes pointer duplication
     saveLocal(); const saved=JSON.parse(localStorage.getItem('anbu_tracker_v1')); ok(!saved.meta && !saved.days && !!saved.members, 'saved state has no pointer dup');
     const reload=migrate(JSON.parse(JSON.stringify(saved))); ok(reload.meta===reload.members[reload.activeId].meta, 'reload re-links active pointer');
+    // 24) i18n English/Tamil (UI chrome only). NB: local 'const t' above shadows the
+    // global t() here, so reference window.t explicitly in this test.
+    const T=window.t;
+    ok(typeof T==='function' && typeof translateDOM==='function', 'i18n functions defined');
+    LANG='en'; ok(T('Today')==='Today', 'English passthrough');
+    LANG='ta'; ok(T('Today')!=='Today' && /[\\u0B80-\\u0BFF]/.test(T('Today')), 'Tamil translates Today');
+    ok(T('Soya chunk curry')==='Soya chunk curry', 'food name NOT translated (data safe)');
+    applyLang(); ok(document.documentElement.dataset.lang==='ta', 'data-lang attribute set');
+    let i18nThrew=false; try{ render(); }catch(e){ i18nThrew=true; R.fail.push('render ta: '+e.message); } ok(!i18nThrew, 'renders in Tamil without error');
+    ok(/[\\u0B80-\\u0BFF]/.test($('#view').textContent), 'Tamil text appears in the view');
+    LANG='en'; applyLang(); render();
+    ok(!/[\\u0B80-\\u0BFF]/.test($('#view').textContent), 'switching back restores English (no Tamil left)');
     curTab='today'; render();
   } catch(e){ R.fail.push('FATAL: '+e.message+' '+(e.stack||'').split('\\n')[1]); }
   return R;

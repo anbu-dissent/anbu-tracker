@@ -26,6 +26,85 @@ function toastAction(msg,emoji,label,fn,ms=4000){ const t=$('#toast'); t.innerHT
   $('.toast-act',t).onclick=()=>{ t.classList.remove('show'); fn(); }; clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),ms); }
 function floatXP(amount){ if(!amount)return; const p=el(`<div class="xpfloat">+${amount} XP</div>`); document.body.append(p); requestAnimationFrame(()=>p.classList.add('go')); setTimeout(()=>p.remove(),1200); }
 
+/* =====================================================================
+   i18n — English ⇄ Tamil for UI chrome only (per-device).
+   A post-render walker swaps exact dictionary matches in text nodes +
+   placeholders. Food names / user data are never in the dict, so they
+   pass through untouched. Fully reversible (originals stashed on nodes).
+   ===================================================================== */
+let LANG = (()=>{ try{ return localStorage.getItem('anbu_lang')||'en'; }catch(e){ return 'en'; } })();
+const I18N = { ta: {
+  // tabs + header
+  'Today':'இன்று','Week':'வாரம்','Shop':'கடை','Stats':'புள்ளிவிவரம்','More':'மேலும்',
+  'fat-loss · high-protein':'கொழுப்பு குறைப்பு · அதிக புரதம்',
+  // common buttons / words
+  'Add':'சேர்','Save':'சேமி','Cancel':'ரத்து','Back':'பின்','Done':'முடிந்தது','Remove':'நீக்கு','Close':'மூடு',
+  'Next':'அடுத்து','Redeem':'பெறு','Share':'பகிர்','Import':'இறக்குமதி','Add manually':'கைமுறையாக சேர்',
+  'Reset list':'பட்டியலை மீட்டமை','Clear checked':'தேர்ந்ததை அழி','Build from this week':'இந்த வாரத்திலிருந்து உருவாக்கு',
+  'you':'நீங்கள்','switch ›':'மாற்று ›',
+  // headings
+  'Settings':'அமைப்புகள்','Goals':'இலக்குகள்','Appearance':'தோற்றம்','Theme':'தீம்','Language':'மொழி',
+  'Dark':'இருள்','Light':'ஒளி','Weekly plan':'வாரத் திட்டம்','Shopping':'பொருட்பட்டியல்','Meals':'உணவுகள்',
+  'Daily habits':'தினசரி பழக்கங்கள்','Activity & body':'செயல்பாடு & உடல்','Progress & rewards':'முன்னேற்றம் & வெகுமதிகள்',
+  'Badges':'பதக்கங்கள்','Streak leaderboard':'தொடர் தரவரிசை','This week':'இந்த வாரம்','Fat-loss goal':'கொழுப்பு குறைப்பு இலக்கு',
+  'My library':'எனது நூலகம்','My meals':'எனது உணவுகள்','Backup & data':'காப்பு & தரவு','Reminders':'நினைவூட்டல்கள்',
+  'Family cloud sync':'குடும்ப கிளவுட் ஒத்திசைவு','Custom food':'தனிப்பயன் உணவு','Edit food':'உணவைத் திருத்து',
+  'Manage family':'குடும்பத்தை நிர்வகி','Quick add':'விரைவு சேர்ப்பு','Add food':'உணவைச் சேர்','New meal':'புதிய உணவு',
+  'Edit meal':'உணவைத் திருத்து','Batch-prep checklist':'முன்தயாரிப்பு பட்டியல்',
+  // macros / hero
+  'Protein':'புரதம்','Carbs':'கார்போஹைட்ரேட்','Fat':'கொழுப்பு','Calories':'கலோரிகள்','Water':'நீர்',
+  'Goal':'இலக்கு','Eaten':'உண்டது','Exercise':'உடற்பயிற்சி','Remaining':'மீதம்','Over':'அதிகம்','left':'மீதம்','over':'அதிகம்',
+  // slots
+  'Pre-workout':'பயிற்சிக்கு முன்','Shake':'ஷேக்','Breakfast':'காலை உணவு','Mid-morning':'காலை இடைவேளை',
+  'Lunch':'மதிய உணவு','Evening':'மாலை','Dinner':'இரவு உணவு','Before bed':'படுக்கைக்கு முன்',
+  'breakfast':'காலை','lunch':'மதியம்','evening':'மாலை','dinner':'இரவு',
+  // day types
+  'Gym':'ஜிம்','Rest':'ஓய்வு','Cricket':'கிரிக்கெட்',
+  // habits
+  'Protein shake taken':'புரத ஷேக் எடுத்தாயிற்று','Hit water target':'நீர் இலக்கை அடைந்தது','5+ veg/plants today':'இன்று 5+ காய்கறிகள்',
+  '7+ hrs sleep':'7+ மணி தூக்கம்','No unplanned junk':'திட்டமிடாத ஜங்க் இல்லை','8k+ steps / active':'8k+ அடிகள் / சுறுசுறுப்பு',
+  // activity / body
+  'Worked out / active':'பயிற்சி / சுறுசுறுப்பு','Estimate burn':'எரிப்பை மதிப்பிடு','Add burn to budget':'எரித்ததை பட்ஜெட்டில் சேர்',
+  'Day notes':'நாள் குறிப்புகள்',
+  // fields
+  'Name':'பெயர்','Age':'வயது','Height (cm)':'உயரம் (செ.மீ)','Goal weight':'இலக்கு எடை','Goal weight (kg)':'இலக்கு எடை (கி.கி)',
+  'Weight now (kg)':'தற்போதைய எடை (கி.கி)','Pace of fat loss':'கொழுப்பு குறைப்பு வேகம்','Protein g per kg bodyweight':'உடல் எடை கி.கிக்கு புரதம் கி',
+  'Water (L)':'நீர் (லி)','Gym / week':'ஜிம் / வாரம்','Quantity (servings)':'அளவு (பரிமாறல்கள்)','Amount (grams)':'அளவு (கிராம்)',
+  'Servings':'பரிமாறல்கள்','Grams':'கிராம்','Meal name':'உணவின் பெயர்','Family name':'குடும்பப் பெயர்',
+  'Supabase URL':'Supabase URL','Supabase anon key':'Supabase anon key','Family Sync ID (shared, private)':'குடும்ப ஒத்திசைவு ஐடி (பகிரப்பட்ட, தனிப்பட்ட)',
+  'Evening streak-saver time':'மாலை தொடர் காப்பு நேரம்',
+  // buttons (longer)
+  'Add member':'உறுப்பினரைச் சேர்','Family overview':'குடும்பப் பார்வை','Manage members & family name':'உறுப்பினர்கள் & குடும்பப் பெயரை நிர்வகி',
+  'Save & connect':'சேமித்து இணை','Push all':'அனைத்தையும் அனுப்பு','Disconnect':'துண்டி','Send test':'சோதனை அனுப்பு',
+  'Add to phone calendar':'ஃபோன் கேலெண்டரில் சேர்','Enable reminders':'நினைவூட்டல்களை இயக்கு','Save goals':'இலக்குகளைச் சேமி',
+  'Save & recalculate':'சேமித்து மீண்டும் கணக்கிடு','Save meal':'உணவைச் சேமி','Build a meal from foods':'உணவுகளில் இருந்து உணவை உருவாக்கு',
+  'Export backup':'காப்புப்பிரதி ஏற்றுமதி','Reset library & plan to default':'நூலகம் & திட்டத்தை இயல்புக்கு மீட்டமை','Erase ALL data':'அனைத்து தரவையும் அழி',
+  'Redeem a treat':'ஒரு வெகுமதியைப் பெறு','Clear all meals':"நாளின் உணவுகளை அழி",
+  // stats words
+  'avg protein':'சராசரி புரதம்','on-target days':'இலக்கு நாட்கள்','workouts':'பயிற்சிகள்','weight Δ':'எடை மாற்றம்',
+  'members':'உறுப்பினர்கள்','combined lost':'மொத்தம் குறைந்தது',
+  // placeholders
+  'Add item…':'பொருளைச் சேர்…','qty':'அளவு','Notes (lifts, PRs, feel)':'குறிப்புகள் (லிஃப்ட், PR, உணர்வு)',
+  'Search foods…':'உணவுகளைத் தேடு…','Type a food… palak, paneer, banana':'உணவைத் தட்டச்சு செய்… பாலக், பன்னீர், வாழை',
+}};
+function t(s){ return (LANG==='ta' && I18N.ta[s]) ? I18N.ta[s] : s; }
+function applyLang(){ try{ document.documentElement.dataset.lang = LANG; }catch(e){} }
+const _LEAD=/^([^\p{L}\p{N}]+\s*)(.+)$/u;
+function _tr(orig){ const tr=orig.trim(); if(!tr) return orig; const d=I18N[LANG]; if(!d) return orig;
+  const lead=orig.match(/^\s*/)[0], trail=orig.match(/\s*$/)[0];
+  let out=d[tr]; if(!out){ const m=tr.match(_LEAD); if(m&&d[m[2]]) out=m[1]+d[m[2]]; }
+  return out? lead+out+trail : orig; }
+function translateDOM(root){ if(!root||LANG==null) return;
+  try{
+    const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null); const nodes=[]; let n;
+    while(n=w.nextNode()) nodes.push(n);
+    for(const node of nodes){ const p=node.parentNode; if(!p)continue; const tag=p.tagName; if(tag==='SCRIPT'||tag==='STYLE'||tag==='TEXTAREA')continue;
+      if(node.__en==null) node.__en=node.nodeValue;
+      node.nodeValue = (LANG==='en')? node.__en : _tr(node.__en); }
+    root.querySelectorAll&&root.querySelectorAll('[placeholder]').forEach(e=>{ if(e.dataset.enPh==null)e.dataset.enPh=e.getAttribute('placeholder')||''; const en=e.dataset.enPh; e.setAttribute('placeholder',(LANG==='en')?en:_tr(en)); });
+  }catch(e){}
+}
+
 /* ---------- dates (local) ---------- */
 const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 function dkey(d){ const x=new Date(d); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`; }
@@ -318,6 +397,7 @@ function render(){
   const v=$('#view'); v.innerHTML='';
   v.append({today:renderToday,week:renderWeek,shop:renderShop,dash:renderDash,more:renderMore,family:renderFamily}[curTab]());
   $$('#tabbar button').forEach(b=>b.classList.toggle('active',b.dataset.tab===curTab));
+  translateDOM(document.body);
   checkNewBadges(false);
   window.scrollTo(0,0);
 }
@@ -904,9 +984,13 @@ function renderMore(){
   frag.append(el('<h1>Settings</h1>'));
 
   // Appearance
-  const appear=el(`<div class="card"><div class="row spread"><h2>🎨 Appearance</h2>
-    <div class="seg" style="width:170px"><button data-th="dark" class="${s.theme!=='light'?'active':''}">🌙 Dark</button><button data-th="light" class="${s.theme==='light'?'active':''}">☀️ Light</button></div></div></div>`);
+  const appear=el(`<div class="card"><h2>🎨 Appearance</h2>
+    <div class="row spread" style="margin-bottom:.6rem"><span class="muted">Theme</span>
+      <div class="seg" style="width:170px"><button data-th="dark" class="${s.theme!=='light'?'active':''}">🌙 Dark</button><button data-th="light" class="${s.theme==='light'?'active':''}">☀️ Light</button></div></div>
+    <div class="row spread"><span class="muted">Language</span>
+      <div class="seg" style="width:170px"><button data-lg="en" class="${LANG!=='ta'?'active':''}">English</button><button data-lg="ta" class="${LANG==='ta'?'active':''}">தமிழ்</button></div></div></div>`);
   $$('[data-th]',appear).forEach(b=>b.onclick=()=>{ s.theme=b.dataset.th; applyTheme(); touchMeta(); render(); });
+  $$('[data-lg]',appear).forEach(b=>b.onclick=()=>{ LANG=b.dataset.lg; try{localStorage.setItem('anbu_lang',LANG);}catch(e){} applyLang(); render(); });
   frag.append(appear);
 
   // Goal engine
@@ -1128,7 +1212,7 @@ function recipeFoodPick(cb){
 /* =====================================================================
    MODAL
    ===================================================================== */
-function openModal(html){ closeModal(); const bg=el(`<div class="modal-bg"><div class="modal"><div class="grab"></div>${html}</div></div>`); bg.onclick=e=>{if(e.target===bg)closeModal();}; $('#modalRoot').append(bg); document.body.style.overflow='hidden'; }
+function openModal(html){ closeModal(); const bg=el(`<div class="modal-bg"><div class="modal"><div class="grab"></div>${html}</div></div>`); bg.onclick=e=>{if(e.target===bg)closeModal();}; $('#modalRoot').append(bg); document.body.style.overflow='hidden'; if(LANG!=='en')translateDOM($('#modalRoot')); }
 function closeModal(){ $('#modalRoot').innerHTML=''; document.body.style.overflow=''; }
 
 /* =====================================================================
@@ -1176,7 +1260,7 @@ function openOnboarding(){ const s=S();
 /* =====================================================================
    BOOT
    ===================================================================== */
-applyTheme();
+applyTheme(); applyLang();
 $$('#tabbar button').forEach(b=>b.onclick=()=>{curTab=b.dataset.tab;render();});
 render();
 maybeOnboard();
