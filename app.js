@@ -47,8 +47,9 @@ function defaultState(){
       settings:Object.assign({
         userKey:'anbu-'+Math.random().toString(36).slice(2,8),
         waterTarget:D.targets.waterL, gymPerWeek:D.targets.gymPerWeek,
-        proteinTarget:0, kcalTarget:0, autoTargets:true,
+        proteinTarget:0, kcalTarget:0, carbTarget:0, fatTarget:0, autoTargets:true,
         reminders:{ enabled:false, streakTime:'20:30', meals:false },
+        theme:'dark', favorites:[], onboarded:false,
       }, clone(gd)),
       library:clone(D.library),
       weeklyPlan:structPlan(clone(D.weeklyPlan)),
@@ -74,6 +75,9 @@ function migrate(s){
   if(!s.meta.rewards.redeems) s.meta.rewards.redeems=[];
   if(s.meta.rewards.lastRedeem==null) s.meta.rewards.lastRedeem='';
   if(!s.meta.settings.reminders) s.meta.settings.reminders={enabled:false,streakTime:'20:30',meals:false};
+  if(!s.meta.settings.theme) s.meta.settings.theme='dark';
+  if(!Array.isArray(s.meta.settings.favorites)) s.meta.settings.favorites=[];
+  if(s.meta.settings.onboarded==null) s.meta.settings.onboarded=true; // existing users skip onboarding
   // structured plan
   const wp=s.meta.weeklyPlan||{}; const needStruct=Object.values(wp).some(v=>v&&!('cooked'in v)&&!Array.isArray(v.breakfast));
   s.meta.weeklyPlan=structPlan(wp);
@@ -102,7 +106,12 @@ function computeTargets(st=state){
   const deficit=(s.rateKgPerWeek||0.5)*1100;
   s.kcalTarget=Math.max(1500, Math.round((tdee-deficit)/10)*10);
   s.proteinTarget=Math.round(w*(s.proteinPerKg||1.8));
+  // carbs/fat targets from calories left after protein (≈55/45 split)
+  const rem=Math.max(0, s.kcalTarget - s.proteinTarget*4);
+  s.carbTarget=Math.round(rem*0.55/4);
+  s.fatTarget=Math.round(rem*0.45/9);
 }
+function applyTheme(){ try{ document.documentElement.dataset.theme = (S().theme==='light'?'light':'dark'); }catch(e){} }
 function goalProjection(){
   const s=S(), cur=latestWeight(), togo=cur-s.targetWeight;
   if(togo<=0) return {done:true,cur,togo:0};
@@ -245,6 +254,39 @@ function ring(pct,color,label,val,sub){
     <circle cx="60" cy="60" r="${r}" stroke="${color}" stroke-dasharray="${circ}" stroke-dashoffset="${off}" class="ring-fg"/>
   </svg><div class="ring-c"><div class="rv">${val}</div><div class="rl">${label}</div>${sub?`<div class="rs">${sub}</div>`:''}</div></div>`;
 }
+function macroBar(label,val,target,cls){ const pct=Math.min(100,Math.round(val/(target||1)*100)); const over=val>target*1.1;
+  return `<div class="macrobar ${cls}"><div class="ml"><span class="mname">${label}</span><span class="mval">${Math.round(val)}<i>/${target}g</i></span></div>
+    <div class="mb ${over?'over':''}"><span style="width:${pct}%"></span></div></div>`; }
+function macroHero(k,day,t,s){
+  const kPct=t.kcal/(s.kcalTarget||1), left=Math.round((s.kcalTarget||0)-t.kcal), over=left<0;
+  const r=52,circ=2*Math.PI*r,off=circ*(1-clamp(kPct,0,1));
+  const card=el(`<div class="card hero">
+    <div class="hero-top">
+      <div class="calring ${over?'over':''}"><svg viewBox="0 0 120 120">
+        <circle cx="60" cy="60" r="${r}" class="ring-bg"/>
+        <circle cx="60" cy="60" r="${r}" class="ring-fg cal" stroke-dasharray="${circ}" stroke-dashoffset="${off}"/></svg>
+        <div class="calring-c"><div class="cm">${Math.abs(left)}</div><div class="cs">${over?'over':'left'}</div></div></div>
+      <div class="hero-side">
+        <div class="hs-row"><span>Goal</span><b>${s.kcalTarget}</b></div>
+        <div class="hs-row"><span>Eaten</span><b>${t.kcal}</b></div>
+        <div class="hs-row tot"><span>${over?'Over':'Remaining'}</span><b class="${over?'down':'up'}">${Math.abs(left)} kcal</b></div>
+        <div class="hs-mini muted">${t.items} item${t.items===1?'':'s'} today</div>
+      </div>
+    </div>
+    <div class="macrobars">
+      ${macroBar('Protein',t.p,s.proteinTarget,'p')}
+      ${macroBar('Carbs',t.c,s.carbTarget,'c')}
+      ${macroBar('Fat',t.f,s.fatTarget,'f')}
+    </div>
+    <div class="water-row">
+      <div class="wr-label">💧 <b>${(day.water||0).toFixed(2).replace(/\.?0+$/,'')}</b> / ${s.waterTarget} L water</div>
+      <div class="wr-btns"><button class="chip-btn" data-water="-0.25">−</button><button class="chip-btn pri" data-water="0.25">+250ml</button><button class="chip-btn" data-water="0.5">+500</button></div>
+    </div>
+    <div class="water-track"><span style="width:${Math.min(100,(day.water||0)/s.waterTarget*100)}%"></span></div>
+  </div>`);
+  card.querySelectorAll('[data-water]').forEach(b=>b.onclick=()=>{ day.water=Math.max(0,Math.round(((day.water||0)+ +b.dataset.water)*100)/100); touchDay(k); buzz(10); render(); });
+  return card;
+}
 function dateStrip(){ const wrap=el('<div class="datestrip"></div>');
   for(let i=-4;i<=2;i++){ const k=addDays(TODAY,i),d=parseDk(k),has=state.days[k]&&state.days[k].logged.length,ot=isOnTarget(k);
     const chip=el(`<div class="daychip ${k===TODAY?'today':''} ${k===selDate?'sel':''} ${has?'has':''}">
@@ -286,24 +328,8 @@ function renderToday(){
   /* --- MISSION / reward hero --- */
   frag.append(missionCard(k,day,t,s));
 
-  /* --- macros --- */
-  const pPct=t.p/s.proteinTarget,kPct=t.kcal/s.kcalTarget,wPct=(day.water||0)/s.waterTarget;
-  const left=Math.max(0,s.kcalTarget-t.kcal);
-  const m=el(`<div class="card"><div class="rings">
-      ${ring(pPct,'#4ade80','protein',t.p+'g','/'+s.proteinTarget)}
-      ${ring(kPct,'#38bdf8','kcal',t.kcal,'/'+s.kcalTarget)}
-      ${ring(wPct,'#22d3ee','water',(day.water||0).toFixed(2).replace(/\.?0+$/,'')+'L','/'+s.waterTarget)}
-    </div>
-    <div class="row spread small" style="margin-top:.5rem">
-      <span class="muted">${t.c}g carb · ${t.f}g fat · ${t.items} items</span>
-      <span class="${left>0?'muted':'down'}">${left>0?left+' kcal left':Math.abs(left)+' kcal over'}</span></div>
-    <div class="row" style="gap:.3rem;margin-top:.5rem">
-      <button class="btn sm primary grow" data-water="0.25">💧 +250ml</button>
-      <button class="btn sm grow" data-water="0.5">+500ml</button>
-      <button class="btn sm" data-water="-0.25">−</button></div>
-  </div>`);
-  m.querySelectorAll('[data-water]').forEach(b=>b.onclick=()=>{ day.water=Math.max(0,Math.round(((day.water||0)+ +b.dataset.water)*100)/100); touchDay(k); buzz(10); render(); });
-  frag.append(m);
+  /* --- macros hero --- */
+  frag.append(macroHero(k,day,t,s));
 
   /* --- meals by slot --- */
   const plan=state.meta.weeklyPlan[planDow(k)]||{};
@@ -428,67 +454,111 @@ function itemMenu(k,it){ const day=getDay(k);
 const SLOT_CAT={pre:'Snack',shake:'Supplement',breakfast:'Breakfast',midmorning:'Snack',lunch:'Dish',evening:'Snack',dinner:'Dish',bed:'Dairy'};
 function searchFoods(q){
   q=q.toLowerCase().trim();
-  const out=[];
-  const seen=new Set();
-  const push=(name,p,c,f,kcal,src,serv)=>{ const key=name.toLowerCase(); if(seen.has(key))return; seen.add(key); out.push({name,p:p||0,c:c==null?null:c,f:f==null?null:f,kcal:kcal||0,src,serv}); };
-  for(const it of state.meta.library){ if(!q||it.name.toLowerCase().includes(q)) push(it.name,it.p,it.c,it.f,it.kcal,'lib',''); }
-  for(const it of FDB){ if(!q||it.n.toLowerCase().includes(q)||it.cat.toLowerCase().includes(q)) push(it.n,it.p,it.c,it.f,it.k,'db',it.serv); }
+  const out=[],seen=new Set();
+  const push=(name,p,c,f,kcal,serv,g)=>{ const key=name.toLowerCase(); if(seen.has(key))return; seen.add(key); out.push({name,p:p||0,c:c==null?null:c,f:f==null?null:f,kcal:kcal||0,serv:serv||'',g:g||null}); };
+  for(const it of state.meta.library){ if(!q||it.name.toLowerCase().includes(q)) push(it.name,it.p,it.c,it.f,it.kcal,'',it.g||null); }
+  for(const it of FDB){ if(!q||it.n.toLowerCase().includes(q)||it.cat.toLowerCase().includes(q)) push(it.n,it.p,it.c,it.f,it.k,it.serv,it.g); }
+  if(q) out.sort((a,b)=>{ const as=a.name.toLowerCase().startsWith(q)?0:1, bs=b.name.toLowerCase().startsWith(q)?0:1; if(as!==bs)return as-bs; return a.name.length-b.name.length; });
   return out;
 }
+function isFav(name){ return S().favorites.includes(name); }
+function toggleFav(name){ const f=S().favorites,i=f.indexOf(name); if(i>=0)f.splice(i,1); else f.unshift(name); touchMeta(); }
+function favFoods(){ return S().favorites.map(name=>{ const l=state.meta.library.find(x=>x.name===name); if(l)return {name:l.name,p:l.p,c:l.c,f:l.f,kcal:l.kcal,serv:'',g:l.g||null}; const d=FDB.find(x=>x.n===name); if(d)return {name:d.n,p:d.p,c:d.c,f:d.f,kcal:d.k,serv:d.serv,g:d.g}; return {name,p:0,c:null,f:null,kcal:0,serv:'',g:null}; }); }
 let lastPickQuery='';
 function recentFoods(limit=8){ const seen=new Set(),out=[]; const keys=Object.keys(state.days).sort().reverse();
   for(const k of keys){ const d=state.days[k]; for(let i=d.logged.length-1;i>=0;i--){ const it=d.logged[i]; const key=(it.name||'').toLowerCase(); if(!key||seen.has(key))continue; seen.add(key); out.push({name:it.name,p:it.p,c:it.c,f:it.f,kcal:it.kcal,serv:''}); if(out.length>=limit)return out; } }
   return out; }
 function openPicker(k,slotKey){
+  const scanOK='BarcodeDetector'in window;
   openModal(`<div class="picker-search">
-      <div class="row spread"><h2>Add to ${D.slots.find(s=>s.key===slotKey).label}</h2><button class="btn sm" id="newFood">+ Custom</button></div>
-      <input id="ps" placeholder="Search 180+ foods… (paneer, dosa, banana)" autocomplete="off">
-      <div class="row" style="gap:.4rem;margin-top:.4rem"><button class="btn sm ghost grow" id="online">🌐 Search packaged foods online</button></div>
-      <div id="recents"></div>
+      <div class="row spread"><h2>Add food</h2>
+        <div class="row" style="gap:.3rem"><button class="btn sm" id="qadd">⚡ Quick</button>${scanOK?'<button class="btn sm" id="scan">📷 Scan</button>':''}<button class="btn sm" id="newFood">+ New</button></div></div>
+      <input id="ps" placeholder="Type a food… palak, paneer, banana" autocomplete="off" inputmode="search">
+      <div id="chips"></div>
     </div><div id="plist"></div>
-    <div class="picker-hint small faint">Tap a food to log it · tap <b>⚖</b> to set quantity</div>`);
+    <div class="picker-hint small faint">Tap to log · ⚖ for quantity/grams · ☆ to favourite</div>`);
   const list=$('#plist'),search=$('#ps');
-  // recents quick-add (only when not searching)
-  function drawRecents(){ const box=$('#recents'); const r=recentFoods(8);
-    if(!r.length||search.value){ box.innerHTML=''; return; }
-    box.innerHTML='<div class="small faint" style="margin:.5rem 0 .25rem">Recent — tap to add</div>';
-    const strip=el('<div class="recent-strip"></div>');
-    r.forEach(f=>{ const c=el(`<button class="recent-chip">${esc(f.name.split('(')[0].trim())}<i>${f.p}g</i></button>`); c.onclick=()=>quickLog(f); strip.append(c); }); box.append(strip);
+  function quickLog(food){ addLog(k,slotKey,food,1); closeModal(); render(); }
+  function strip(arr){ const s=el('<div class="recent-strip"></div>'); arr.forEach(f=>{ const c=el(`<button class="recent-chip">${esc(f.name.split('(')[0].trim())}<i>${f.p}g</i></button>`); c.onclick=()=>quickLog(f); s.append(c); }); return s; }
+  function drawChips(){ const box=$('#chips'); box.innerHTML=''; if(search.value)return;
+    const favs=favFoods(), rec=recentFoods(8);
+    if(favs.length){ box.append(el('<div class="strip-label">★ Favourites</div>')); box.append(strip(favs)); }
+    if(rec.length){ box.append(el('<div class="strip-label">Recent</div>')); box.append(strip(rec)); }
   }
-  function quickLog(food){ addLog(k,slotKey,food,1); render(); /* keep modal feel snappy: close */ closeModal(); }
-  function draw(){ const q=search.value; lastPickQuery=q; const res=searchFoods(q); list.innerHTML=''; drawRecents();
-    if(!res.length){ list.append(el(`<div class="emptystate">No match.<br><button class="btn sm" id="qadd">+ Add “${esc(q)}” as custom</button></div>`)); const qa=$('#qadd'); if(qa)qa.onclick=()=>customFood(q,nf=>{portionSheet(k,slotKey,nf);}); return; }
-    for(const r of res.slice(0,60)){ const row=el(`<div class="pickitem"><div class="grow tap"><div class="nm">${esc(r.name)}</div>${r.serv?`<div class="small faint">${esc(r.serv)}</div>`:''}</div>
-      <span class="mac">${r.p}g · ${r.kcal}</span><button class="qbtn" title="Set quantity">⚖</button></div>`);
-      $('.tap',row).onclick=()=>quickLog(r);                 // one-tap = log qty 1
-      $('.qbtn',row).onclick=(e)=>{ e.stopPropagation(); portionSheet(k,slotKey,r); };  // gear = choose qty
+  function draw(){ const q=search.value; lastPickQuery=q; const res=searchFoods(q); list.innerHTML=''; drawChips();
+    if(!res.length){ list.append(el(`<div class="emptystate">No match for “${esc(q)}”.<br>
+      <button class="btn sm" id="qa1">+ Add as custom</button> <button class="btn sm ghost" id="qa2">🌐 Search online</button></div>`));
+      const qa1=$('#qa1'); if(qa1)qa1.onclick=()=>customFood(q,nf=>portionSheet(k,slotKey,nf));
+      const qa2=$('#qa2'); if(qa2)qa2.onclick=()=>onlineSearch(q,k,slotKey); return; }
+    for(const r of res.slice(0,60)){ const fav=isFav(r.name);
+      const row=el(`<div class="pickitem"><div class="grow tap"><div class="nm">${esc(r.name)}</div><div class="small faint">${r.serv?esc(r.serv)+' · ':''}${r.kcal} kcal</div></div>
+        <span class="mac">${r.p}g</span><button class="favbtn ${fav?'on':''}">${fav?'★':'☆'}</button><button class="qbtn">⚖</button></div>`);
+      $('.tap',row).onclick=()=>quickLog(r);
+      $('.favbtn',row).onclick=e=>{ e.stopPropagation(); toggleFav(r.name); draw(); };
+      $('.qbtn',row).onclick=e=>{ e.stopPropagation(); portionSheet(k,slotKey,r); };
       list.append(row); }
   }
   search.value=lastPickQuery; search.oninput=draw;
   $('#newFood').onclick=()=>customFood(search.value,nf=>portionSheet(k,slotKey,nf));
-  $('#online').onclick=()=>onlineSearch(search.value,k,slotKey);
-  draw(); setTimeout(()=>{ search.focus(); },50);
+  $('#qadd').onclick=()=>quickAdd(k,slotKey);
+  const sc=$('#scan'); if(sc)sc.onclick=()=>barcodeScan(k,slotKey);
+  draw(); setTimeout(()=>search.focus(),50);
+}
+function quickAdd(k,slotKey){
+  openModal(`<h2>⚡ Quick add</h2><p class="small muted">No lookup — just the numbers (great for eating out).</p>
+    <label class="field"><span>Name (optional)</span><input id="qa-n" placeholder="Quick add"></label>
+    <div class="row" style="gap:.5rem"><label class="field grow"><span>Calories</span><input id="qa-k" type="number" inputmode="numeric"></label><label class="field grow"><span>Protein g</span><input id="qa-p" type="number" inputmode="decimal"></label></div>
+    <div class="row"><button class="btn grow" id="qa-x">Back</button><button class="btn primary grow" id="qa-ok">Add</button></div>`);
+  $('#qa-x').onclick=()=>openPicker(k,slotKey);
+  $('#qa-ok').onclick=()=>{ const kcal=+$('#qa-k').value||0,p=+$('#qa-p').value||0; if(!kcal&&!p){toast('Enter calories or protein');return;} addLog(k,slotKey,{name:$('#qa-n').value.trim()||'Quick add',p,c:null,f:null,kcal},1); closeModal(); render(); };
+  setTimeout(()=>$('#qa-k').focus(),50);
+}
+async function barcodeScan(k,slotKey){
+  if(!('BarcodeDetector'in window)){ toast('Scanning not supported here'); return; }
+  openModal(`<h2>📷 Scan barcode</h2><p class="small muted" id="scanmsg">Point the rear camera at a barcode…</p>
+    <video id="cam" playsinline muted style="width:100%;border-radius:14px;background:#000;aspect-ratio:4/3;object-fit:cover"></video>
+    <button class="btn ghost" id="scanx" style="margin-top:.6rem;width:100%">Cancel</button>`);
+  const video=$('#cam'); let stream=null,stop=false;
+  const det=new window.BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128']});
+  $('#scanx').onclick=()=>{ stop=true; if(stream)stream.getTracks().forEach(t=>t.stop()); openPicker(k,slotKey); };
+  try{ stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}); video.srcObject=stream; await video.play(); }
+  catch(e){ const sm=$('#scanmsg'); if(sm)sm.textContent='Camera blocked — allow it or use search.'; return; }
+  (async function tick(){ if(stop)return; try{ const codes=await det.detect(video); if(codes&&codes.length){ stop=true; if(stream)stream.getTracks().forEach(t=>t.stop()); buzz(30); lookupBarcode(codes[0].rawValue,k,slotKey); return; } }catch(e){} requestAnimationFrame(tick); })();
+}
+async function lookupBarcode(code,k,slotKey){
+  openModal(`<h2>🔎 Looking up…</h2><p class="small muted">Barcode ${esc(code)}</p>`);
+  try{ const r=await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,brands,nutriments`); const j=await r.json();
+    if(j.status!==1||!j.product||!j.product.nutriments){ openModal(`<h2>Not found</h2><p class="small muted">No data for ${esc(code)}.</p><button class="btn primary" id="m" style="width:100%">Add manually</button>`); $('#m').onclick=()=>customFood('',nf=>portionSheet(k,slotKey,nf)); return; }
+    const N=j.product.nutriments, name=((j.product.product_name||'Product')+(j.product.brands?' · '+j.product.brands.split(',')[0]:'')).slice(0,60);
+    portionSheet(k,slotKey,{name,p:Math.round((N.proteins_100g||0)*10)/10,c:Math.round((N.carbohydrates_100g||0)*10)/10,f:Math.round((N.fat_100g||0)*10)/10,kcal:Math.round(N['energy-kcal_100g']||0),serv:'100 g',g:100});
+  }catch(e){ toast('Lookup failed (offline?)'); openPicker(k,slotKey); }
 }
 function portionSheet(k,slotKey,food){
-  // food: {name,p,c,f,kcal,serv}
-  openModal(`<h2>${esc(food.name)}</h2>${food.serv?`<div class="small muted">per ${esc(food.serv)}</div>`:''}
-    <label class="field" style="margin-top:.6rem"><span>Quantity (servings)</span>
-      <div class="row"><button class="btn" id="qm">−</button><input id="qv" type="number" step="0.5" value="1" style="text-align:center;font-size:1.1rem"><button class="btn" id="qp">+</button></div></label>
-    <div class="row" style="gap:.4rem;margin-bottom:.8rem">${[0.5,1,1.5,2,3].map(x=>`<button class="btn sm qset" data-q="${x}">${x}</button>`).join('')}</div>
-    <div class="card tight" id="prev"></div>
-    <label class="row" style="gap:.5rem;margin:.6rem 0"><input type="checkbox" id="save"><span class="small">Also save to my library</span></label>
+  const hasG=!!food.g; let mode='serv';
+  openModal(`<h2>${esc(food.name)}</h2>${food.serv?`<div class="small muted">per ${esc(food.serv)}${hasG?` · ${food.g}g`:''}</div>`:''}
+    ${hasG?`<div class="seg" style="margin:.7rem 0"><button data-m="serv" class="active">Servings</button><button data-m="gram">Grams</button></div>`:''}
+    <label class="field" style="margin-top:.4rem"><span id="qlabel">Quantity (servings)</span>
+      <div class="row"><button class="btn" id="qm">−</button><input id="qv" type="number" step="0.5" value="1" style="text-align:center;font-size:1.15rem"><button class="btn" id="qp">+</button></div></label>
+    <div class="row wrap" style="gap:.4rem;margin-bottom:.8rem" id="presets"></div>
+    <div class="card tight prevbox" id="prev"></div>
+    <div class="row" style="gap:.5rem;margin:.7rem 0"><button class="btn grow" id="favb">${isFav(food.name)?'★ Favourited':'☆ Favourite'}</button>
+      <label class="row" style="gap:.4rem;flex:1;justify-content:center"><input type="checkbox" id="save"><span class="small">Save to library</span></label></div>
     <div class="row"><button class="btn grow" id="cancel">Back</button><button class="btn primary grow" id="add">Add</button></div>`);
-  const qv=$('#qv'); const upd=()=>{ const q=+qv.value||1; $('#prev').innerHTML=`<div class="row spread"><b>${Math.round(food.p*q)}g protein</b><span>${Math.round(food.kcal*q)} kcal</span></div><div class="small muted">${food.c!=null?Math.round(food.c*q)+'g carb · ':''}${food.f!=null?Math.round(food.f*q)+'g fat':''}</div>`; };
-  $('#qm').onclick=()=>{qv.value=Math.max(0.5,(+qv.value||1)-0.5);upd();};
-  $('#qp').onclick=()=>{qv.value=(+qv.value||1)+0.5;upd();};
-  $$('.qset').forEach(b=>b.onclick=()=>{qv.value=b.dataset.q;upd();});
-  qv.oninput=upd; upd();
+  const qv=$('#qv');
+  function mk(){ const v=+qv.value||0; if(mode==='gram'&&hasG){ const r=v/food.g; return {p:food.p*r,c:food.c==null?null:food.c*r,f:food.f==null?null:food.f*r,kcal:food.kcal*r}; } return {p:food.p*v,c:food.c==null?null:food.c*v,f:food.f==null?null:food.f*v,kcal:food.kcal*v}; }
+  function upd(){ const m=mk(); $('#prev').innerHTML=`<div class="row spread"><b style="color:var(--protein)">${Math.round(m.p)}g protein</b><span><b>${Math.round(m.kcal)}</b> kcal</span></div><div class="small muted">${m.c!=null?Math.round(m.c)+'g carb · ':''}${m.f!=null?Math.round(m.f)+'g fat':''}</div>`; }
+  function presets(){ const arr=mode==='gram'?[50,100,150,200,250]:[0.5,1,1.5,2,3]; const box=$('#presets'); box.innerHTML=arr.map(x=>`<button class="btn sm qset" data-q="${x}">${x}${mode==='gram'?'g':''}</button>`).join(''); $$('.qset',box).forEach(b=>b.onclick=()=>{qv.value=b.dataset.q;upd();}); }
+  $('#qm').onclick=()=>{const st=mode==='gram'?10:0.5;qv.value=Math.max(st,(+qv.value||0)-st);upd();};
+  $('#qp').onclick=()=>{const st=mode==='gram'?10:0.5;qv.value=(+qv.value||0)+st;upd();};
+  qv.oninput=upd;
+  $$('[data-m]').forEach(b=>b.onclick=()=>{ mode=b.dataset.m; $$('[data-m]').forEach(x=>x.classList.toggle('active',x===b)); $('#qlabel').textContent=mode==='gram'?'Amount (grams)':'Quantity (servings)'; qv.step=mode==='gram'?'10':'0.5'; qv.value=mode==='gram'?food.g:1; presets(); upd(); });
+  $('#favb').onclick=()=>{ toggleFav(food.name); $('#favb').textContent=isFav(food.name)?'★ Favourited':'☆ Favourite'; };
   $('#cancel').onclick=()=>openPicker(k,slotKey);
-  $('#add').onclick=()=>{ const q=+qv.value||1;
-    if($('#save').checked){ state.meta.library.push({id:uid(),cat:catFromName(food),name:food.name,p:food.p,c:food.c,f:food.f,kcal:food.kcal}); touchMeta(); }
-    addLog(k,slotKey,food,q); closeModal(); render(); };
+  $('#add').onclick=()=>{ const m=mk(); const v=+qv.value||0; const name=(mode==='gram'&&hasG)?`${food.name} (${Math.round(v)}g)`:food.name;
+    if($('#save').checked && !state.meta.library.some(x=>x.name===food.name)){ state.meta.library.push({id:uid(),cat:'snack',name:food.name,p:food.p,c:food.c,f:food.f,kcal:food.kcal,g:food.g||null}); touchMeta(); }
+    addLog(k,slotKey,{name,p:m.p,c:m.c,f:m.f,kcal:m.kcal},1); closeModal(); render(); };
+  presets(); upd();
 }
-function catFromName(food){ return 'snack'; }
 function addLog(k,slotKey,food,q){ const day=getDay(k), s=S();
   const beforeP=dayTotals(k).p, beforeOT=isOnTarget(k);
   const entry={logId:uid(),slot:slotKey,name:food.name,p:food.p||0,c:food.c,f:food.f,kcal:food.kcal||0,qty:q||1};
@@ -684,6 +754,21 @@ function renderDash(){
     <div class="kpi"><div class="v">${gymN}</div><div class="l">Workouts</div><div class="d muted">${dashRange}d</div></div>
   </div>`));
 
+  // weekly insights
+  (function(){ const thisW=[],lastW=[]; for(let i=0;i<7;i++)thisW.push(addDays(TODAY,-i)); for(let i=7;i<14;i++)lastW.push(addDays(TODAY,-i));
+    const avg=(ks,fn)=>{ const v=ks.filter(isLogged).map(fn); return v.length?v.reduce((a,b)=>a+b,0)/v.length:0; };
+    const pThis=avg(thisW,k=>dayTotals(k).p), pLast=avg(lastW,k=>dayTotals(k).p), dP=pLast?Math.round(pThis-pLast):0;
+    const otThis=thisW.filter(isOnTarget).length, woThis=thisW.filter(k=>state.days[k]&&state.days[k].gym&&state.days[k].gym.done).length;
+    const wThis=thisW.map(k=>state.days[k]&&state.days[k].weight).filter(x=>x!=null), wLast=lastW.map(k=>state.days[k]&&state.days[k].weight).filter(x=>x!=null);
+    const wChange=(wThis.length&&wLast.length)?Math.round((wThis[0]-wLast[wLast.length-1])*10)/10:null;
+    frag.append(el(`<div class="card insights"><h3 style="color:var(--text)">📈 This week</h3><div class="ins-grid">
+      <div class="ins"><div class="iv">${Math.round(pThis)}g</div><div class="il">avg protein</div>${pLast?`<div class="id ${dP>=0?'up':'down'}">${dP>=0?'▲':'▼'} ${Math.abs(dP)}g vs last</div>`:''}</div>
+      <div class="ins"><div class="iv">${otThis}<small>/7</small></div><div class="il">on-target days</div></div>
+      <div class="ins"><div class="iv">${woThis}</div><div class="il">workouts</div></div>
+      <div class="ins"><div class="iv">${wChange==null?'—':(wChange<=0?'':'+')+wChange+'kg'}</div><div class="il">weight Δ</div></div>
+    </div></div>`));
+  })();
+
   if(logged.length){
     const labels=keys.map(k=>parseDk(k).toLocaleDateString(undefined,{day:'numeric',month:'short'}));
     frag.append(chartCard('Body weight vs goal (kg)',c=>mkWeight(c,keys,weights,s.targetWeight),wVals.length>=2));
@@ -723,6 +808,12 @@ function mkWeight(canvas,keys,weights,goal){ const labels=keys.map(k=>parseDk(k)
 function renderMore(){
   const frag=document.createDocumentFragment(); const s=S();
   frag.append(el('<h1>Settings</h1>'));
+
+  // Appearance
+  const appear=el(`<div class="card"><div class="row spread"><h2>🎨 Appearance</h2>
+    <div class="seg" style="width:170px"><button data-th="dark" class="${s.theme!=='light'?'active':''}">🌙 Dark</button><button data-th="light" class="${s.theme==='light'?'active':''}">☀️ Light</button></div></div></div>`);
+  $$('[data-th]',appear).forEach(b=>b.onclick=()=>{ s.theme=b.dataset.th; applyTheme(); touchMeta(); render(); });
+  frag.append(appear);
 
   // Goal engine
   const proj=goalProjection();
@@ -848,11 +939,28 @@ function buildICS(){ const c=remCfg(); const [h,mm]=(c.streakTime||'20:30').spli
   const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//AnbuTracker//EN','CALSCALE:GREGORIAN','BEGIN:VEVENT','UID:anbu-daily@tracker','SUMMARY:🔥 Log your meals — keep the streak alive','RRULE:FREQ=DAILY',`DTSTART:20240101T${h}${mm}00`,'DURATION:PT10M','DESCRIPTION:Open Anbu Tracker and log today’s food, water and workout.','BEGIN:VALARM','TRIGGER:PT0M','ACTION:DISPLAY','DESCRIPTION:Log in Anbu Tracker','END:VALARM','END:VEVENT','END:VCALENDAR'].join('\r\n');
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([ics],{type:'text/calendar'})); a.download='anbu-daily-reminder.ics'; a.click(); toast('Calendar reminder downloaded','📅'); }
 
+/* ===== Onboarding (first run) ===== */
+function maybeOnboard(){ if(S().onboarded) return; openOnboarding(); }
+function openOnboarding(){ const s=S();
+  openModal(`<h2>👋 Let’s set your goal</h2><p class="small muted">Two taps and your fat-loss targets are calculated for you.</p>
+    <div class="row" style="gap:.5rem"><label class="field grow"><span>Height (cm)</span><input id="o-h" type="number" value="${s.heightCm}"></label><label class="field grow"><span>Age</span><input id="o-age" type="number" value="${s.age}"></label></div>
+    <div class="row" style="gap:.5rem"><label class="field grow"><span>Weight now (kg)</span><input id="o-sw" type="number" step="0.1" value="${s.startWeight}"></label><label class="field grow"><span>Goal weight (kg)</span><input id="o-tw" type="number" step="0.1" value="${s.targetWeight}"></label></div>
+    <label class="field"><span>Pace of fat loss</span><select id="o-rate">
+      <option value="0.25">Easy · 0.25 kg/week</option><option value="0.5">Steady · 0.5 kg/week</option>
+      <option value="0.6" selected>Recommended · 0.6 kg/week</option><option value="0.75">Fast · 0.75 kg/week</option></select></label>
+    <button class="btn primary" id="o-go" style="width:100%">Calculate my targets →</button>
+    <button class="btn ghost" id="o-skip" style="width:100%;margin-top:.4rem">Skip for now</button>`);
+  $('#o-go').onclick=()=>{ s.heightCm=+$('#o-h').value||s.heightCm; s.age=+$('#o-age').value||s.age; s.startWeight=+$('#o-sw').value||s.startWeight; s.targetWeight=+$('#o-tw').value||s.targetWeight; s.rateKgPerWeek=+$('#o-rate').value; s.autoTargets=true; s.onboarded=true; computeTargets(); touchMeta(); closeModal(); confetti(); toast(`Targets set: ${s.kcalTarget} kcal · ${s.proteinTarget}g protein`,'🎯'); render(); };
+  $('#o-skip').onclick=()=>{ s.onboarded=true; touchMeta(); closeModal(); };
+}
+
 /* =====================================================================
    BOOT
    ===================================================================== */
+applyTheme();
 $$('#tabbar button').forEach(b=>b.onclick=()=>{curTab=b.dataset.tab;render();});
 render();
+maybeOnboard();
 initSync();
 addEventListener('online',()=>{ if(loadSbCfg()&&!sb)initSync(); });
 try{ idbSet('lastOpen',TODAY); syncRemToIDB(); if(remCfg().enabled){ registerPeriodic(); scheduleReminders(); } }catch(e){}

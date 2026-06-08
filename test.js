@@ -87,6 +87,21 @@ window.__r = (function(){
     state.meta.weeklyPlan.Mon.breakfast=[{name:'Plan idli',p:12,c:20,f:2,kcal:160}];
     const beforeN=getDay(mk).logged.length; logPlanned(mk,'breakfast',state.meta.weeklyPlan.Mon.breakfast);
     ok(getDay(mk).logged.length>beforeN, 'logPlanned adds planned items');
+    // 16) v3: bigger DB + ranking + grams
+    ok(window.FOODS_DB.length>250, 'food DB expanded = '+window.FOODS_DB.length);
+    const sp=searchFoods('palak'); ok(sp.length>0 && sp[0].name.toLowerCase().startsWith('palak'), 'search ranks prefix first');
+    const veg=searchFoods('spinach'); ok(veg.length>0, 'vegetable searchable');
+    const withG=searchFoods('paneer').find(x=>x.g); ok(!!withG && withG.g>0, 'DB items carry grams for scaling');
+    // 17) macro targets
+    ok(S().carbTarget>0 && S().fatTarget>0, 'carb+fat targets computed ('+S().carbTarget+'/'+S().fatTarget+')');
+    // 18) favorites
+    toggleFav('Boiled egg (whole)'); ok(isFav('Boiled egg (whole)'), 'favorite toggles on');
+    ok(favFoods().some(f=>f.name==='Boiled egg (whole)'&&f.kcal>0), 'favFoods resolves macros');
+    toggleFav('Boiled egg (whole)'); ok(!isFav('Boiled egg (whole)'), 'favorite toggles off');
+    // 19) new functions exist
+    ok(typeof quickAdd==='function' && typeof barcodeScan==='function' && typeof macroHero==='function' && typeof openOnboarding==='function', 'v3 functions defined');
+    // 20) theme
+    S().theme='light'; applyTheme(); ok(document.documentElement.dataset.theme==='light','theme applies'); S().theme='dark'; applyTheme();
     curTab='today'; render();
   } catch(e){ R.fail.push('FATAL: '+e.message+' '+(e.stack||'').split('\\n')[1]); }
   return R;

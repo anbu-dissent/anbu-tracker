@@ -1,9 +1,12 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
-<meta name="theme-color" content="#0f1115">
+<meta name="theme-color" content="#0b0d12">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Anbu Tracker">
@@ -15,9 +18,12 @@
 <body>
 
 <header class="app">
-  <div>
-    <div class="title">💪 Anbu Tracker</div>
-    <div class="sub" id="headerSub">High-protein • eggetarian</div>
+  <div class="brand">
+    <div class="logo">🔥</div>
+    <div>
+      <div class="title">FUEL<span style="color:var(--accent)">·</span>Anbu</div>
+      <div class="sub" id="headerSub">fat-loss · high-protein</div>
+    </div>
   </div>
   <div class="sync-dot" id="syncDot" title="Sync status">
     <span class="dot"></span><span class="lbl">local</span>
@@ -27,11 +33,16 @@
 <main id="view"><!-- rendered by app.js --></main>
 
 <nav class="tabbar" id="tabbar">
-  <button data-tab="today"    class="active"><span class="ic">📋</span>Today</button>
-  <button data-tab="week"><span class="ic">🗓️</span>Week</button>
-  <button data-tab="shop"><span class="ic">🛒</span>Shopping</button>
-  <button data-tab="dash"><span class="ic">📊</span>Stats</button>
-  <button data-tab="more"><span class="ic">⚙️</span>More</button>
+  <button data-tab="today" class="active" aria-label="Today">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>Today</button>
+  <button data-tab="week" aria-label="Week">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>Week</button>
+  <button data-tab="shop" aria-label="Shopping">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1.6"/><circle cx="18" cy="21" r="1.6"/><path d="M2 3h2.5l2.2 12.5a2 2 0 0 0 2 1.6h8.4a2 2 0 0 0 2-1.6L21.5 7H6"/></svg>Shop</button>
+  <button data-tab="dash" aria-label="Stats">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Stats</button>
+  <button data-tab="more" aria-label="More">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.5 14a1.6 1.6 0 0 0-1.5-1H2a2 2 0 0 1 0-4h.1A1.6 1.6 0 0 0 4.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 3.5a1.6 1.6 0 0 0 1-1.5V2a2 2 0 0 1 4 0v.1A1.6 1.6 0 0 0 17 4.6a1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1h.1a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.4 1z"/></svg>More</button>
 </nav>
 
 <div id="modalRoot"></div>

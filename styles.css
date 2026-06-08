@@ -1,20 +1,39 @@
 /* ===== Anbu Tracker — styles.css ===== */
 :root{
-  --bg:#0f1115; --surface:#171a21; --surface2:#1f242e; --line:#2a313d;
-  --text:#e7ecf3; --muted:#9aa6b6; --faint:#6b7686;
-  --accent:#4ade80; --accent2:#38bdf8; --warn:#fbbf24; --bad:#f87171;
-  --protein:#4ade80; --kcal:#38bdf8; --water:#22d3ee; --weight:#a78bfa;
-  --radius:14px; --shadow:0 6px 24px rgba(0,0,0,.35);
+  /* dark (default) */
+  --bg:#0b0d12; --bg2:#0f1218; --surface:#161a22; --surface2:#1e232d; --line:#2a313d;
+  --text:#eef2f8; --muted:#9aa6b6; --faint:#697384;
+  --accent:#34e09a; --accent-ink:#04231a; --accent2:#38bdf8; --warn:#fbbf24; --bad:#fb7185;
+  --protein:#34e09a; --carb:#fbbf24; --fat:#fb7185; --kcal:#38bdf8; --water:#22d3ee; --weight:#a78bfa;
+  --grad:linear-gradient(135deg,#34e09a 0%,#22d3ee 100%);
+  --grad-warm:linear-gradient(135deg,#fbbf24,#fb7185);
+  --radius:18px; --shadow:0 8px 30px rgba(0,0,0,.4);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+html[data-theme="light"]{
+  --bg:#f4f6fa; --bg2:#eef1f6; --surface:#ffffff; --surface2:#f1f4f9; --line:#e2e7ef;
+  --text:#10151e; --muted:#5a6675; --faint:#9aa6b6;
+  --accent:#10b97e; --accent-ink:#ffffff; --accent2:#0ea5e9; --warn:#d97706; --bad:#ef4444;
+  --protein:#10b97e; --carb:#d97706; --fat:#ef4444; --kcal:#0ea5e9; --water:#0891b2; --weight:#7c3aed;
+  --shadow:0 6px 22px rgba(20,30,50,.10);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
 body{
-  background:var(--bg); color:var(--text);
-  font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  padding-bottom:calc(76px + var(--safe-bottom));
+  background:
+    radial-gradient(1200px 380px at 100% -10%, color-mix(in srgb, var(--accent) 9%, transparent), transparent),
+    radial-gradient(900px 360px at -10% 0%, color-mix(in srgb, var(--accent2) 9%, transparent), transparent),
+    var(--bg);
+  background-attachment:fixed;
+  color:var(--text);
+  font:15px/1.5 "Inter","Inter var",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  letter-spacing:-.005em;
+  padding-bottom:calc(80px + var(--safe-bottom));
   overscroll-behavior-y:contain;
 }
+@supports not (background: color-mix(in srgb, red, blue)){ body{ background:var(--bg); } }
+#view{animation:viewIn .28s ease}
+@keyframes viewIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 h1,h2,h3{margin:0 0 .5rem;font-weight:650;letter-spacing:-.01em}
 h1{font-size:1.25rem} h2{font-size:1.05rem} h3{font-size:.92rem;color:var(--muted)}
 a{color:var(--accent2)}
@@ -23,12 +42,17 @@ button{font-family:inherit}
 
 /* Header */
 header.app{
-  position:sticky;top:0;z-index:20;background:rgba(15,17,21,.92);
-  backdrop-filter:blur(8px);border-bottom:1px solid var(--line);
+  position:sticky;top:0;z-index:20;
+  background:color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter:blur(12px) saturate(1.2);-webkit-backdrop-filter:blur(12px) saturate(1.2);
+  border-bottom:1px solid var(--line);
   padding:.7rem 1rem;display:flex;align-items:center;gap:.6rem;
 }
-header.app .title{font-weight:700;font-size:1.05rem}
-header.app .sub{color:var(--muted);font-size:.78rem}
+@supports not (background: color-mix(in srgb, red, blue)){ header.app{ background:var(--bg2); } }
+header.app .brand{display:flex;align-items:center;gap:.55rem}
+header.app .logo{width:34px;height:34px;border-radius:11px;background:var(--grad);display:flex;align-items:center;justify-content:center;font-size:1.1rem;box-shadow:0 4px 12px color-mix(in srgb,var(--accent) 40%, transparent)}
+header.app .title{font-weight:800;font-size:1.06rem;letter-spacing:-.02em;line-height:1.05}
+header.app .sub{color:var(--muted);font-size:.72rem}
 .sync-dot{margin-left:auto;display:flex;align-items:center;gap:.4rem;font-size:.72rem;color:var(--muted)}
 .sync-dot .dot{width:9px;height:9px;border-radius:50%;background:var(--faint)}
 .sync-dot.on .dot{background:var(--accent);box-shadow:0 0 8px var(--accent)}
@@ -54,7 +78,7 @@ main{max-width:780px;margin:0 auto;padding:1rem;}
   border-radius:10px;padding:.55rem .85rem;font-size:.88rem;cursor:pointer;transition:.12s}
 .btn:hover{border-color:var(--faint)}
 .btn:active{transform:scale(.97)}
-.btn.primary{background:var(--accent);color:#06210f;border-color:transparent;font-weight:650}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:700}
 .btn.accent{background:var(--accent2);color:#062538;border-color:transparent;font-weight:650}
 .btn.ghost{background:transparent}
 .btn.sm{padding:.35rem .55rem;font-size:.78rem;border-radius:8px}
@@ -73,17 +97,22 @@ label.field>span{display:block;font-size:.78rem;color:var(--muted);margin-bottom
 /* Bottom nav */
 nav.tabbar{
   position:fixed;left:0;right:0;bottom:0;z-index:30;
-  background:rgba(23,26,33,.96);backdrop-filter:blur(10px);
+  background:color-mix(in srgb, var(--bg2) 92%, transparent);
+  backdrop-filter:blur(14px) saturate(1.3);-webkit-backdrop-filter:blur(14px) saturate(1.3);
   border-top:1px solid var(--line);
   display:flex;justify-content:space-around;
-  padding:.35rem .25rem calc(.35rem + var(--safe-bottom));
+  padding:.4rem .25rem calc(.4rem + var(--safe-bottom));
 }
+@supports not (background: color-mix(in srgb, red, blue)){ nav.tabbar{ background:var(--bg2); } }
 nav.tabbar button{
   background:none;border:none;color:var(--faint);cursor:pointer;
-  display:flex;flex-direction:column;align-items:center;gap:2px;
-  font-size:.64rem;padding:.3rem .5rem;border-radius:10px;flex:1;min-width:0}
-nav.tabbar button .ic{font-size:1.2rem;line-height:1}
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  font-size:.62rem;font-weight:600;padding:.35rem .5rem;border-radius:12px;flex:1;min-width:0;
+  transition:color .15s, transform .1s}
+nav.tabbar button:active{transform:scale(.9)}
+nav.tabbar button svg{width:23px;height:23px;stroke-width:2;display:block}
 nav.tabbar button.active{color:var(--accent)}
+nav.tabbar button.active svg{filter:drop-shadow(0 2px 6px color-mix(in srgb,var(--accent) 55%, transparent))}
 
 /* Date strip */
 .datestrip{display:flex;gap:.4rem;overflow-x:auto;padding:.2rem 0 .5rem;scrollbar-width:none}
@@ -274,6 +303,64 @@ nav.tabbar button.active{color:var(--accent)}
 .confetti-c{position:fixed;inset:0;pointer-events:none;z-index:90}
 
 .daychip .pill.ot{background:var(--accent)!important}
+
+/* ===================== v3 visual system ===================== */
+.btn.primary{background:var(--grad);box-shadow:0 6px 16px color-mix(in srgb,var(--accent) 28%, transparent)}
+.card{border-radius:var(--radius);position:relative}
+.card::before{content:"";position:absolute;inset:0 0 auto 0;height:1px;border-radius:var(--radius) var(--radius) 0 0;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--text) 12%,transparent),transparent);pointer-events:none}
+h1{font-weight:800;letter-spacing:-.025em;font-size:1.35rem}
+
+/* Calorie + macro hero */
+.card.hero{background:linear-gradient(165deg, color-mix(in srgb,var(--accent) 7%, var(--surface)), var(--surface))}
+.hero-top{display:flex;align-items:center;gap:1rem}
+.calring{position:relative;width:130px;height:130px;flex:0 0 auto}
+.calring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.calring .ring-bg{fill:none;stroke:var(--surface2);stroke-width:10}
+.ring-fg.cal{fill:none;stroke:var(--accent);stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset .7s cubic-bezier(.3,.8,.3,1);filter:drop-shadow(0 0 6px color-mix(in srgb,var(--accent) 55%,transparent))}
+.calring.over .ring-fg.cal{stroke:var(--bad);filter:drop-shadow(0 0 6px color-mix(in srgb,var(--bad) 55%,transparent))}
+.calring-c{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.calring-c .cm{font-size:2rem;font-weight:800;line-height:1;letter-spacing:-.03em}
+.calring-c .cs{font-size:.66rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
+.hero-side{flex:1;display:flex;flex-direction:column;gap:.35rem}
+.hero-side .hs-row{display:flex;justify-content:space-between;font-size:.84rem;color:var(--muted)}
+.hero-side .hs-row b{color:var(--text);font-weight:700}
+.hero-side .hs-row.tot{border-top:1px solid var(--line);padding-top:.4rem;margin-top:.1rem;font-size:.92rem}
+.hero-side .hs-mini{font-size:.72rem;margin-top:.1rem}
+.macrobars{display:flex;gap:.7rem;margin-top:1rem}
+.macrobar{flex:1}
+.macrobar .ml{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.3rem}
+.macrobar .mname{font-size:.74rem;font-weight:600;color:var(--muted)}
+.macrobar .mval{font-size:.82rem;font-weight:700}
+.macrobar .mval i{font-style:normal;font-weight:500;color:var(--faint);font-size:.7rem}
+.macrobar .mb{height:7px;border-radius:6px;background:var(--surface2);overflow:hidden}
+.macrobar .mb>span{display:block;height:100%;border-radius:6px;transition:width .5s ease}
+.macrobar.p .mb>span{background:var(--protein)} .macrobar.c .mb>span{background:var(--carb)} .macrobar.f .mb>span{background:var(--fat)}
+.macrobar .mb.over>span{background:repeating-linear-gradient(45deg,var(--bad),var(--bad) 5px,transparent 5px,transparent 10px),var(--bad)}
+.water-row{display:flex;align-items:center;justify-content:space-between;margin-top:1rem}
+.water-row .wr-label{font-size:.84rem;color:var(--muted)} .water-row .wr-label b{color:var(--water);font-size:1rem}
+.wr-btns{display:flex;gap:.3rem}
+.chip-btn{background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:.3rem .55rem;font-size:.78rem;font-weight:600;cursor:pointer}
+.chip-btn:active{transform:scale(.93)} .chip-btn.pri{background:color-mix(in srgb,var(--water) 22%,var(--surface2));border-color:var(--water);color:var(--water)}
+.water-track{height:6px;border-radius:5px;background:var(--surface2);overflow:hidden;margin-top:.5rem}
+.water-track>span{display:block;height:100%;background:linear-gradient(90deg,var(--water),var(--accent2));transition:width .5s}
+
+/* food picker chips + rows */
+.strip-label{font-size:.72rem;font-weight:600;color:var(--faint);margin:.6rem 0 .3rem;text-transform:uppercase;letter-spacing:.04em}
+.pickitem .favbtn{background:none;border:none;color:var(--faint);font-size:1.15rem;cursor:pointer;min-width:34px;min-height:38px}
+.pickitem .favbtn.on{color:var(--warn)}
+.prevbox{background:linear-gradient(120deg,color-mix(in srgb,var(--accent) 8%,var(--surface2)),var(--surface2))}
+
+/* insights */
+.insights .ins-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;margin-top:.3rem}
+@media(max-width:460px){.insights .ins-grid{grid-template-columns:repeat(2,1fr)}}
+.ins{background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:.6rem .5rem;text-align:center}
+.ins .iv{font-size:1.25rem;font-weight:800;letter-spacing:-.02em}
+.ins .iv small{font-size:.7rem;color:var(--muted);font-weight:600}
+.ins .il{font-size:.66rem;color:var(--muted);margin-top:.1rem}
+.ins .id{font-size:.64rem;margin-top:.15rem;font-weight:600}
+
+/* portion sheet segment reuse */
+.seg button{font-weight:600}
 
 /* ===== v2.1 UX upgrades ===== */
 /* greeting / context banner */
