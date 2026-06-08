@@ -20,7 +20,19 @@ Your data **persists** on the device and (when sync is on) in the cloud, so you 
 
 ---
 
-## Run it
+## 📱 Live app
+
+**https://anbu-dissent.github.io/anbu-tracker/**
+
+**Install on Android (do this — it unlocks reminders + offline):**
+1. Open the URL in **Chrome**.
+2. Tap the **⋮** menu → **Add to Home screen** / **Install app**.
+3. Open it from your home screen (it now runs full-screen like a native app).
+4. In the app: **More → 🔔 Reminders → Enable**, allow notifications, tap **Send test**. Optionally tap **Add to phone calendar** for a guaranteed daily reminder.
+
+Updates: any `git push` to `main` redeploys automatically in ~1 minute.
+
+## Run it locally
 
 ### Quick test on your laptop
 From this folder, start any static server (the app must be served over http, not opened as a file — service worker + sync need it):
