@@ -1,5 +1,5 @@
 /* Service worker — offline app shell + background reminders. Bump CACHE to update. */
-const CACHE = 'anbu-tracker-v3';
+const CACHE = 'anbu-tracker-v4';
 const ASSETS = [
   './', './index.html', './styles.css', './data.js', './foods-db.js', './app.js',
   './manifest.json', './icon.svg',
@@ -18,14 +18,25 @@ self.addEventListener('fetch', e => {
   const url = new URL(request.url);
   // never cache supabase API/realtime calls
   if (url.hostname.endsWith('supabase.co') || url.hostname.endsWith('supabase.in')) return;
-  // app shell + libs: cache-first, fall back to network and cache it
-  e.respondWith(
-    caches.match(request).then(hit => hit || fetch(request).then(res => {
-      const copy = res.clone();
-      if (res.ok) caches.open(CACHE).then(c => c.put(request, copy)).catch(()=>{});
-      return res;
-    }).catch(() => caches.match('./index.html')))
-  );
+
+  const sameOrigin = url.origin === self.location.origin;
+  if (sameOrigin) {
+    // App's own files: NETWORK-FIRST so updates always land; fall back to cache offline.
+    e.respondWith(
+      fetch(request).then(res => {
+        if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(request, copy)).catch(()=>{}); }
+        return res;
+      }).catch(() => caches.match(request).then(hit => hit || caches.match('./index.html')))
+    );
+  } else {
+    // Cross-origin (CDN libs): cache-first for speed/offline.
+    e.respondWith(
+      caches.match(request).then(hit => hit || fetch(request).then(res => {
+        if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(request, copy)).catch(()=>{}); }
+        return res;
+      }))
+    );
+  }
 });
 
 /* ---- Background daily reminder (Chrome/Android Periodic Background Sync) ---- */
