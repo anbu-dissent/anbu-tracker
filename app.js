@@ -39,17 +39,19 @@ const TODAY=dkey(new Date());
 /* =====================================================================
    STATE
    ===================================================================== */
-function defaultState(){
+const MEMBER_COLORS=['#34e09a','#38bdf8','#fbbf24','#fb7185','#a78bfa','#f472b6','#22d3ee','#fb923c'];
+const MEMBER_EMOJI=['💪','🏃','🧘','🥗','⚡','🌟','🔥','🦾'];
+function defaultMemberData(name){
   const gd=D.goalDefaults;
   return {
     meta:{
       updatedAt:now(),
       settings:Object.assign({
-        userKey:'anbu-'+Math.random().toString(36).slice(2,8),
+        name:name||'Me',
         waterTarget:D.targets.waterL, gymPerWeek:D.targets.gymPerWeek,
         proteinTarget:0, kcalTarget:0, carbTarget:0, fatTarget:0, autoTargets:true,
         reminders:{ enabled:false, streakTime:'20:30', meals:false },
-        theme:'dark', favorites:[], onboarded:false,
+        theme:'dark', favorites:[], onboarded:false, eatBack:false,
       }, clone(gd)),
       library:clone(D.library),
       weeklyPlan:structPlan(clone(D.weeklyPlan)),
@@ -57,60 +59,98 @@ function defaultState(){
       cookTasks:D.cookChecklist.map(t=>({id:uid(),label:t,done:false})),
       cookWeek:weekKey(TODAY),
       rewards:{ lastRedeem:'', redeems:[], badges:{} },
+      recipes:[],
     },
     days:{},
   };
+}
+function defaultState(){
+  const id=uid(), m=defaultMemberData('Me'); computeTargetsFor(m);
+  return { familyKey:'fam-'+Math.random().toString(36).slice(2,8), familyName:'My Family', rosterUpdatedAt:now(),
+    activeId:id, roster:[{id,name:'Me',emoji:'💪',color:MEMBER_COLORS[0]}],
+    members:{[id]:m}, meta:m.meta, days:m.days };
 }
 function structPlan(wp){ const out={}; for(const dow of D.days){ const src=wp[dow]||{}; out[dow]={cooked:{}}; for(const s of ['breakfast','lunch','evening','dinner']){ const v=src[s]; out[dow][s]= Array.isArray(v)?v : (v? [{name:v}] : []); } } return out; }
 
 let state=loadLocal();
 let selDate=TODAY, curTab='today';
 
-function loadLocal(){ try{ const raw=localStorage.getItem(LS_KEY); if(raw){ const s=JSON.parse(raw); if(s&&s.meta&&s.days) return migrate(s); } }catch(e){} const s=defaultState(); computeTargets(s); return s; }
+function loadLocal(){ try{ const raw=localStorage.getItem(LS_KEY); if(raw){ const s=JSON.parse(raw); if(s) return migrate(s); } }catch(e){} return defaultState(); }
 function migrate(s){
-  const def=defaultState();
-  s.meta.settings=Object.assign({}, def.meta.settings, s.meta.settings);
-  if(!s.meta.rewards) s.meta.rewards=def.meta.rewards;
-  if(!s.meta.rewards.badges) s.meta.rewards.badges={};
-  if(!s.meta.rewards.redeems) s.meta.rewards.redeems=[];
-  if(s.meta.rewards.lastRedeem==null) s.meta.rewards.lastRedeem='';
-  if(!s.meta.settings.reminders) s.meta.settings.reminders={enabled:false,streakTime:'20:30',meals:false};
-  if(!s.meta.settings.theme) s.meta.settings.theme='dark';
-  if(!Array.isArray(s.meta.settings.favorites)) s.meta.settings.favorites=[];
-  if(s.meta.settings.onboarded==null) s.meta.settings.onboarded=true; // existing users skip onboarding
-  // structured plan
-  const wp=s.meta.weeklyPlan||{}; const needStruct=Object.values(wp).some(v=>v&&!('cooked'in v)&&!Array.isArray(v.breakfast));
-  s.meta.weeklyPlan=structPlan(wp);
-  if(!s.meta.cookTasks) s.meta.cookTasks=def.meta.cookTasks;
-  if(!s.meta.cookWeek) s.meta.cookWeek=weekKey(TODAY);
-  for(const k in s.days){ const d=s.days[k]; if(!d.habits)d.habits={}; if(d.gym&&typeof d.gym!=='object')d.gym={done:false}; }
-  computeTargets(s);
+  if(!s.familyKey){
+    // ---- upgrade v3 single-user -> v4 family ----
+    const famKey=(s.meta&&s.meta.settings&&s.meta.settings.userKey)||('fam-'+Math.random().toString(36).slice(2,8));
+    const id=uid(); const member={ meta:s.meta||defaultMemberData('Me').meta, days:s.days||{} };
+    migrateMember(member);
+    const ns={ familyKey:famKey, familyName:'My Family', rosterUpdatedAt:now(), activeId:id,
+      roster:[{id,name:member.meta.settings.name||'Me',emoji:'💪',color:MEMBER_COLORS[0]}],
+      members:{[id]:member} };
+    ns.meta=member.meta; ns.days=member.days; return ns;
+  }
+  if(!s.familyName) s.familyName='My Family';
+  if(!s.rosterUpdatedAt) s.rosterUpdatedAt=now();
+  if(!s.members||!Object.keys(s.members).length){ const d=defaultState(); return d; }
+  for(const id in s.members) migrateMember(s.members[id]);
+  if(!s.members[s.activeId]) s.activeId=Object.keys(s.members)[0];
+  s.meta=s.members[s.activeId].meta; s.days=s.members[s.activeId].days;
   return s;
 }
+function migrateMember(m){
+  const def=defaultMemberData();
+  m.meta.settings=Object.assign({}, def.meta.settings, m.meta.settings);
+  delete m.meta.settings.userKey;
+  if(!m.meta.rewards) m.meta.rewards=def.meta.rewards;
+  if(!m.meta.rewards.badges) m.meta.rewards.badges={};
+  if(!m.meta.rewards.redeems) m.meta.rewards.redeems=[];
+  if(m.meta.rewards.lastRedeem==null) m.meta.rewards.lastRedeem='';
+  if(!m.meta.settings.reminders) m.meta.settings.reminders={enabled:false,streakTime:'20:30',meals:false};
+  if(!m.meta.settings.theme) m.meta.settings.theme='dark';
+  if(!Array.isArray(m.meta.settings.favorites)) m.meta.settings.favorites=[];
+  if(m.meta.settings.onboarded==null) m.meta.settings.onboarded=true;
+  if(!Array.isArray(m.meta.recipes)) m.meta.recipes=[];
+  m.meta.weeklyPlan=structPlan(m.meta.weeklyPlan||{});
+  if(!m.meta.cookTasks) m.meta.cookTasks=def.meta.cookTasks;
+  if(!m.meta.cookWeek) m.meta.cookWeek=weekKey(TODAY);
+  for(const k in m.days){ const d=m.days[k]; if(!d.habits)d.habits={}; if(d.gym&&typeof d.gym!=='object')d.gym={done:false}; }
+  computeTargetsFor(m);
+}
+/* ---- member helpers ---- */
+function activeMember(){ return state.members[state.activeId]; }
+function memberInfo(id){ return state.roster.find(m=>m.id===id)||{id,name:'?',emoji:'🙂',color:'#888'}; }
+function setActive(id){ if(!state.members[id])return; saveLocal(); state.activeId=id; state.meta=state.members[id].meta; state.days=state.members[id].days; selDate=TODAY; applyTheme(); saveLocal(); if(curTab==='family')curTab='today'; render(); }
+function touchRoster(){ state.rosterUpdatedAt=now(); saveLocal(); schedulePush('roster'); }
+function eachMember(fn){ for(const id in state.members) fn(id, state.members[id], memberInfo(id)); }
+
 let saveT=null;
-function saveLocal(){ localStorage.setItem(LS_KEY,JSON.stringify(state)); }
-function touchMeta(){ state.meta.updatedAt=now(); saveLocal(); schedulePush('meta'); }
+function saveLocal(){ try{ localStorage.setItem(LS_KEY,JSON.stringify({familyKey:state.familyKey,familyName:state.familyName,rosterUpdatedAt:state.rosterUpdatedAt,activeId:state.activeId,roster:state.roster,members:state.members})); }catch(e){} }
+function touchMeta(){ activeMember().meta.updatedAt=now(); saveLocal(); schedulePush('meta:'+state.activeId); }
 function getDay(k){ if(!state.days[k]) state.days[k]={logged:[],gym:{done:false,type:'',minutes:null,notes:''},water:0,weight:null,notes:'',habits:{},updatedAt:now()}; if(!state.days[k].habits)state.days[k].habits={}; return state.days[k]; }
-function touchDay(k){ const d=getDay(k); d.updatedAt=now(); saveLocal(); schedulePush('day:'+k); }
+function touchDay(k){ const d=getDay(k); d.updatedAt=now(); saveLocal(); schedulePush('day:'+state.activeId+':'+k); }
 
 const S=()=>state.meta.settings;
-function latestWeight(){ const keys=Object.keys(state.days).filter(k=>state.days[k].weight!=null).sort(); return keys.length? state.days[keys[keys.length-1]].weight : S().startWeight; }
+function latestWeightFor(m){ const keys=Object.keys(m.days).filter(k=>m.days[k].weight!=null).sort(); return keys.length? m.days[keys[keys.length-1]].weight : m.meta.settings.startWeight; }
+function latestWeight(){ return latestWeightFor(activeMember()); }
 
 /* ---------- goal engine ---------- */
-function computeTargets(st=state){
-  const s=st.meta.settings; if(s.autoTargets===false) return;
-  const keys=Object.keys(st.days).filter(k=>st.days[k].weight!=null).sort();
-  const w= keys.length? st.days[keys[keys.length-1]].weight : s.startWeight;
+function computeTargetsFor(m){
+  const s=m.meta.settings; if(s.autoTargets===false) return;
+  const keys=Object.keys(m.days).filter(k=>m.days[k].weight!=null).sort();
+  const w= keys.length? m.days[keys[keys.length-1]].weight : s.startWeight;
   const bmr=10*w + 6.25*s.heightCm - 5*s.age + (s.sex==='female'?-161:5);
   const tdee=bmr*(s.activity||1.5);
   const deficit=(s.rateKgPerWeek||0.5)*1100;
   s.kcalTarget=Math.max(1500, Math.round((tdee-deficit)/10)*10);
   s.proteinTarget=Math.round(w*(s.proteinPerKg||1.8));
-  // carbs/fat targets from calories left after protein (≈55/45 split)
   const rem=Math.max(0, s.kcalTarget - s.proteinTarget*4);
   s.carbTarget=Math.round(rem*0.55/4);
   s.fatTarget=Math.round(rem*0.45/9);
 }
+function computeTargets(){ computeTargetsFor(activeMember()); }
+/* ---- member-scoped computations (for the family view, any member) ---- */
+function totalsFor(m,k){ const d=m.days[k]; const t={p:0,c:0,f:0,kcal:0,items:0}; if(d)for(const it of d.logged){const q=it.qty||1;t.p+=(it.p||0)*q;t.c+=(it.c||0)*q;t.f+=(it.f||0)*q;t.kcal+=(it.kcal||0)*q;t.items++;} t.p=Math.round(t.p);t.c=Math.round(t.c);t.f=Math.round(t.f);t.kcal=Math.round(t.kcal); return t; }
+function onTargetForM(m,k){ const d=m.days[k]; if(!d||d.logged.length<3)return false; const t=totalsFor(m,k),s=m.meta.settings; return t.p>=s.proteinTarget*0.95&&t.kcal>0&&t.kcal<=s.kcalTarget*1.03; }
+function streakForM(m){ const hit=k=>{const d=m.days[k];return d&&d.logged.length>=1;}; let i=0; if(!hit(TODAY))i=1; let s=0; for(;;i++){const k=addDays(TODAY,-i); if(parseDk(k)<new Date(2024,0,1))break; if(hit(k))s++; else break;} return s; }
+function estBurn(type,min){ const met={Gym:6,Cricket:7,Cardio:8,Walk:3.5,Yoga:3,Other:5}[type]||5; return Math.round(met*latestWeight()*(min/60)); }
 function applyTheme(){ try{ document.documentElement.dataset.theme = (S().theme==='light'?'light':'dark'); }catch(e){} }
 function goalProjection(){
   const s=S(), cur=latestWeight(), togo=cur-s.targetWeight;
@@ -211,25 +251,62 @@ function initSync(loud){ sbCfg=loadSbCfg(); if(!sbCfg||!sbCfg.url||!sbCfg.key){ 
   try{ sb=window.supabase.createClient(sbCfg.url,sbCfg.key,{realtime:{params:{eventsPerSecond:3}}}); setSyncUI('sync');
     pullAll().then(()=>{subscribeRealtime();setSyncUI('on');}).catch(e=>{console.error(e);setSyncUI('err');toast('Sync error: '+(e.message||e.code||e),'⚠️');}); }
   catch(e){ console.error(e); setSyncUI('err'); toast('Connect failed: '+(e.message||e),'⚠️'); } }
-const uk=()=>S().userKey;
+/* Keys: family roster + per-member meta/days, all under one shared family project. */
+const famKey=()=>state.familyKey;
+const rosterKey=()=>famKey()+'~roster';
+const memberKey=(id)=>famKey()+'~m_'+id;
+function ensureMember(id){ if(!state.members[id]) state.members[id]={meta:defaultMemberData().meta,days:{}}; return state.members[id]; }
 async function pullAll(){ if(!sb)return;
-  const {data:meta,error:e1}=await sb.from('app_meta').select('*').eq('user_key',uk()).maybeSingle();
-  if(e1&&e1.code!=='PGRST116')throw e1;
-  if(meta&&meta.payload&&meta.payload.updatedAt>state.meta.updatedAt) state.meta=migrate({meta:meta.payload,days:state.days}).meta;
-  const {data:days,error:e2}=await sb.from('app_days').select('*').eq('user_key',uk()); if(e2)throw e2;
-  if(days)for(const r of days){ const k=r.date,l=state.days[k]; if(!l||(r.payload&&r.payload.updatedAt>l.updatedAt)) state.days[k]=r.payload; }
-  computeTargets(); saveLocal(); render(); }
+  // 1) roster
+  const {data:rr,error:re}=await sb.from('app_meta').select('*').eq('user_key',rosterKey()).maybeSingle();
+  if(re&&re.code!=='PGRST116')throw re;
+  const hadRoster=!!(rr&&rr.payload);
+  if(rr&&rr.payload&&(!state.rosterUpdatedAt||rr.payload.updatedAt>state.rosterUpdatedAt)){
+    if(Array.isArray(rr.payload.roster)&&rr.payload.roster.length) state.roster=rr.payload.roster;
+    if(rr.payload.familyName) state.familyName=rr.payload.familyName;
+    state.rosterUpdatedAt=rr.payload.updatedAt;
+  }
+  state.roster.forEach(r=>ensureMember(r.id));
+  // 2) each member meta + days
+  for(const r of state.roster){ const mk=memberKey(r.id), mem=ensureMember(r.id);
+    const {data:mr}=await sb.from('app_meta').select('*').eq('user_key',mk).maybeSingle();
+    if(mr&&mr.payload&&(!mem.meta.updatedAt||mr.payload.updatedAt>mem.meta.updatedAt)) mem.meta=mr.payload;
+    const {data:drs}=await sb.from('app_days').select('*').eq('user_key',mk);
+    if(drs)for(const dr of drs){ const k=dr.date,l=mem.days[k]; if(!l||(dr.payload&&dr.payload.updatedAt>l.updatedAt)) mem.days[k]=dr.payload; }
+  }
+  // 3) legacy import: a fresh device whose only cloud data is the old single-user key
+  const act=activeMember();
+  if(!Object.keys(act.days).length && act.meta.library.length<=D.library.length){
+    const {data:om}=await sb.from('app_meta').select('*').eq('user_key',famKey()).maybeSingle();
+    if(om&&om.payload&&om.payload.settings){ act.meta=om.payload; const {data:od}=await sb.from('app_days').select('*').eq('user_key',famKey()); if(od)for(const dr of od) act.days[dr.date]=dr.payload; migrateMember(act); }
+  }
+  for(const id in state.members) migrateMember(state.members[id]);
+  state.meta=activeMember().meta; state.days=activeMember().days;
+  saveLocal(); render();
+  // Seed the cloud family if it doesn't exist yet but this device already has data.
+  if(!hadRoster && Object.keys(activeMember().days).length){ fullPushAll(); }
+}
 function subscribeRealtime(){ if(!sb)return;
-  sb.channel('anbu-'+uk())
-    .on('postgres_changes',{event:'*',schema:'public',table:'app_meta',filter:'user_key=eq.'+uk()},p=>{ const r=p.new; if(r&&r.payload&&r.payload.updatedAt>state.meta.updatedAt){ state.meta=r.payload; computeTargets(); saveLocal(); render(); toast('Synced from another device','🔄'); } })
-    .on('postgres_changes',{event:'*',schema:'public',table:'app_days',filter:'user_key=eq.'+uk()},p=>{ const r=p.new; if(!r)return; const k=r.date,l=state.days[k]; if(!l||(r.payload&&r.payload.updatedAt>l.updatedAt)){ state.days[k]=r.payload; computeTargets(); saveLocal(); if(k===selDate||curTab!=='today')render(); } })
+  // Private family project → subscribe to all changes, filter to our family client-side.
+  sb.channel('fam-'+famKey())
+    .on('postgres_changes',{event:'*',schema:'public',table:'app_meta'},p=>rtMeta(p.new))
+    .on('postgres_changes',{event:'*',schema:'public',table:'app_days'},p=>rtDay(p.new))
     .subscribe(); }
+function rtMeta(row){ if(!row||!row.user_key||!row.payload)return;
+  if(row.user_key===rosterKey()){ if(!state.rosterUpdatedAt||row.payload.updatedAt>state.rosterUpdatedAt){ state.rosterUpdatedAt=row.payload.updatedAt; if(Array.isArray(row.payload.roster))state.roster=row.payload.roster; if(row.payload.familyName)state.familyName=row.payload.familyName; saveLocal(); pullAll(); } return; }
+  const pre=famKey()+'~m_'; if(!row.user_key.startsWith(pre))return; const id=row.user_key.slice(pre.length); const mem=ensureMember(id);
+  if(!mem.meta.updatedAt||row.payload.updatedAt>mem.meta.updatedAt){ mem.meta=row.payload; if(id===state.activeId)state.meta=mem.meta; saveLocal(); render(); } }
+function rtDay(row){ if(!row||!row.user_key||!row.payload)return; const pre=famKey()+'~m_'; if(!row.user_key.startsWith(pre))return;
+  const id=row.user_key.slice(pre.length),k=row.date,mem=ensureMember(id),l=mem.days[k];
+  if(!l||row.payload.updatedAt>l.updatedAt){ mem.days[k]=row.payload; if(id===state.activeId)state.days=mem.days; saveLocal(); render(); } }
 function schedulePush(w){ if(!sb)return; pushQ.add(w); setSyncUI('sync'); clearTimeout(pushTimer); pushTimer=setTimeout(flushPush,900); }
 async function flushPush(){ if(!sb)return; const jobs=[...pushQ]; pushQ.clear();
-  try{ for(const j of jobs){ if(j==='meta') await sb.from('app_meta').upsert({user_key:uk(),updated_at:state.meta.updatedAt,payload:state.meta},{onConflict:'user_key'});
-    else if(j.startsWith('day:')){ const k=j.slice(4),d=state.days[k]; if(d) await sb.from('app_days').upsert({user_key:uk(),date:k,updated_at:d.updatedAt,payload:d},{onConflict:'user_key,date'}); } }
+  try{ for(const j of jobs){
+      if(j==='roster') await sb.from('app_meta').upsert({user_key:rosterKey(),updated_at:state.rosterUpdatedAt||now(),payload:{roster:state.roster,familyName:state.familyName,updatedAt:state.rosterUpdatedAt||now()}},{onConflict:'user_key'});
+      else if(j.startsWith('meta:')){ const id=j.slice(5),mem=state.members[id]; if(mem) await sb.from('app_meta').upsert({user_key:memberKey(id),updated_at:mem.meta.updatedAt,payload:mem.meta},{onConflict:'user_key'}); }
+      else if(j.startsWith('day:')){ const rest=j.slice(4),ci=rest.indexOf(':'),id=rest.slice(0,ci),k=rest.slice(ci+1),mem=state.members[id],d=mem&&mem.days[k]; if(d) await sb.from('app_days').upsert({user_key:memberKey(id),date:k,updated_at:d.updatedAt,payload:d},{onConflict:'user_key,date'}); } }
     setSyncUI('on'); }catch(e){ console.error(e); setSyncUI('err'); toast('Push failed: '+(e.message||e.code||(e&&e.details)||JSON.stringify(e)),'⚠️'); } }
-async function fullPushAll(){ if(!sb){ toast('Not connected — Save & connect first','⚠️'); return; } pushQ.add('meta'); Object.keys(state.days).forEach(k=>pushQ.add('day:'+k)); await flushPush(); }
+async function fullPushAll(){ if(!sb){ toast('Not connected — Save & connect first','⚠️'); return; } pushQ.add('roster'); for(const id in state.members){ pushQ.add('meta:'+id); for(const k in state.members[id].days) pushQ.add('day:'+id+':'+k); } await flushPush(); }
 
 /* =====================================================================
    ROUTER
@@ -237,12 +314,17 @@ async function fullPushAll(){ if(!sb){ toast('Not connected — Save & connect f
 function render(){
   // weekly auto-reset of cook checklist
   if(state.meta.cookWeek!==weekKey(TODAY)){ state.meta.cookWeek=weekKey(TODAY); state.meta.cookTasks.forEach(t=>t.done=false); touchMeta(); }
+  updateHeader();
   const v=$('#view'); v.innerHTML='';
-  v.append({today:renderToday,week:renderWeek,shop:renderShop,dash:renderDash,more:renderMore}[curTab]());
+  v.append({today:renderToday,week:renderWeek,shop:renderShop,dash:renderDash,more:renderMore,family:renderFamily}[curTab]());
   $$('#tabbar button').forEach(b=>b.classList.toggle('active',b.dataset.tab===curTab));
   checkNewBadges(false);
   window.scrollTo(0,0);
 }
+function updateHeader(){ try{ let host=$('#memberHost'); if(!host){ const dot=$('#syncDot'); if(!dot)return; host=el('<div id="memberHost"></div>'); dot.parentNode.insertBefore(host,dot); }
+  const mi=memberInfo(state.activeId);
+  host.innerHTML=`<button id="memberBtn" class="member-chip"><span class="ava" style="background:${mi.color}">${mi.emoji}</span><span class="mc-name">${esc(mi.name)}</span><span class="car">▾</span></button>`;
+  $('#memberBtn').onclick=openMemberSheet; }catch(e){} }
 
 /* =====================================================================
    TAB: TODAY
@@ -258,7 +340,9 @@ function macroBar(label,val,target,cls){ const pct=Math.min(100,Math.round(val/(
   return `<div class="macrobar ${cls}"><div class="ml"><span class="mname">${label}</span><span class="mval">${Math.round(val)}<i>/${target}g</i></span></div>
     <div class="mb ${over?'over':''}"><span style="width:${pct}%"></span></div></div>`; }
 function macroHero(k,day,t,s){
-  const kPct=t.kcal/(s.kcalTarget||1), left=Math.round((s.kcalTarget||0)-t.kcal), over=left<0;
+  const burn=(s.eatBack && day.gym && day.gym.done)?(day.gym.kcal||0):0;
+  const target=(s.kcalTarget||0)+burn;
+  const kPct=t.kcal/(target||1), left=Math.round(target-t.kcal), over=left<0;
   const r=52,circ=2*Math.PI*r,off=circ*(1-clamp(kPct,0,1));
   const card=el(`<div class="card hero">
     <div class="hero-top">
@@ -268,6 +352,7 @@ function macroHero(k,day,t,s){
         <div class="calring-c"><div class="cm">${Math.abs(left)}</div><div class="cs">${over?'over':'left'}</div></div></div>
       <div class="hero-side">
         <div class="hs-row"><span>Goal</span><b>${s.kcalTarget}</b></div>
+        ${burn?`<div class="hs-row"><span>Exercise</span><b class="up">+${burn}</b></div>`:''}
         <div class="hs-row"><span>Eaten</span><b>${t.kcal}</b></div>
         <div class="hs-row tot"><span>${over?'Over':'Remaining'}</span><b class="${over?'down':'up'}">${Math.abs(left)} kcal</b></div>
         <div class="hs-mini muted">${t.items} item${t.items===1?'':'s'} today</div>
@@ -369,9 +454,12 @@ function renderToday(){
   const gc=el(`<div class="card"><h2>Activity & body</h2>
     <label class="row" style="gap:.6rem;margin-bottom:.6rem"><input type="checkbox" id="gd" ${g.done?'checked':''}><span class="grow">Worked out / active</span><span class="small faint">+${D.scoring.workout} XP</span></label>
     <div id="gdt" class="${g.done?'':'hidden'}">
-      <div class="row wrap" style="gap:.5rem;margin-bottom:.6rem">
+      <div class="row wrap" style="gap:.5rem;margin-bottom:.5rem">
         <select id="gt" style="flex:1">${['Gym','Cricket','Cardio','Walk','Yoga','Other'].map(o=>`<option ${(g.type||defType)===o?'selected':''}>${o}</option>`).join('')}</select>
-        <input id="gm" type="number" inputmode="numeric" placeholder="min" value="${g.minutes??''}" style="width:90px"></div>
+        <input id="gm" type="number" inputmode="numeric" placeholder="min" value="${g.minutes??''}" style="width:74px">
+        <input id="gk" type="number" inputmode="numeric" placeholder="kcal" value="${g.kcal??''}" style="width:80px"></div>
+      <div class="row spread" style="margin-bottom:.5rem"><button class="btn sm ghost" id="gauto">⚡ Estimate burn</button>
+        <label class="row small" style="gap:.4rem"><input type="checkbox" id="geat" ${s.eatBack?'checked':''}><span>Add burn to budget</span></label></div>
       <input id="gn" placeholder="Notes (lifts, PRs, feel)" value="${esc(g.notes||'')}"></div>
     <div class="divider"></div>
     <label class="field"><span>Body weight (kg) — drives your fat-loss chart</span><input id="bw" type="number" inputmode="decimal" step="0.1" placeholder="${latestWeight()}" value="${day.weight??''}"></label>
@@ -379,6 +467,9 @@ function renderToday(){
   $('#gd',gc).onchange=e=>{g.done=e.target.checked;if(g.done&&!g.type)g.type=defType;day.gym=g;touchDay(k);$('#gdt',gc).classList.toggle('hidden',!g.done);if(g.done){buzz(15);}};
   $('#gt',gc).onchange=e=>{g.type=e.target.value;day.gym=g;touchDay(k);};
   $('#gm',gc).onchange=e=>{g.minutes=e.target.value?+e.target.value:null;day.gym=g;touchDay(k);};
+  $('#gk',gc).onchange=e=>{g.kcal=e.target.value?+e.target.value:null;day.gym=g;touchDay(k);if(s.eatBack)render();};
+  $('#gauto',gc).onclick=()=>{ const min=g.minutes||+$('#gm',gc).value||45; const b=estBurn(g.type||defType,min); g.kcal=b;g.minutes=min;day.gym=g;touchDay(k);toast('Estimated ~'+b+' kcal burned','🔥');render(); };
+  $('#geat',gc).onchange=e=>{ s.eatBack=e.target.checked; touchMeta(); render(); };
   $('#gn',gc).onchange=e=>{g.notes=e.target.value;day.gym=g;touchDay(k);};
   $('#bw',gc).onchange=e=>{ const wasLost=S().startWeight-latestWeight(); day.weight=e.target.value?+e.target.value:null; touchDay(k); computeTargets(); const nowLost=S().startWeight-latestWeight(); if(nowLost>wasLost+0.05){confetti();toast('Weight logged — trending down!','📉');} render(); };
   $('#dn',gc).onchange=e=>{day.notes=e.target.value;touchDay(k);};
@@ -481,9 +572,12 @@ function openPicker(k,slotKey){
   function quickLog(food){ addLog(k,slotKey,food,1); closeModal(); render(); }
   function strip(arr){ const s=el('<div class="recent-strip"></div>'); arr.forEach(f=>{ const c=el(`<button class="recent-chip">${esc(f.name.split('(')[0].trim())}<i>${f.p}g</i></button>`); c.onclick=()=>quickLog(f); s.append(c); }); return s; }
   function drawChips(){ const box=$('#chips'); box.innerHTML=''; if(search.value)return;
-    const favs=favFoods(), rec=recentFoods(8);
+    const recipes=state.meta.recipes||[], favs=favFoods(), rec=recentFoods(8);
+    if(recipes.length){ box.append(el('<div class="strip-label">🍲 My meals — tap to log</div>')); const s=el('<div class="recent-strip"></div>');
+      recipes.forEach(rp=>{ const tt=recipeTotals(rp.items); const c=el(`<button class="recent-chip meal">${esc(rp.name)}<i>${Math.round(tt.p)}g</i></button>`); c.onclick=()=>{ addLog(k,slotKey,{name:rp.name,p:tt.p,c:tt.c,f:tt.f,kcal:tt.kcal},1); closeModal(); render(); }; s.append(c); }); box.append(s); }
     if(favs.length){ box.append(el('<div class="strip-label">★ Favourites</div>')); box.append(strip(favs)); }
     if(rec.length){ box.append(el('<div class="strip-label">Recent</div>')); box.append(strip(rec)); }
+    const bm=el('<button class="btn sm ghost" style="margin-top:.5rem;width:100%">🍲 Build a meal from foods</button>'); bm.onclick=()=>openRecipeBuilder(); box.append(bm);
   }
   function draw(){ const q=search.value; lastPickQuery=q; const res=searchFoods(q); list.innerHTML=''; drawChips();
     if(!res.length){ list.append(el(`<div class="emptystate">No match for “${esc(q)}”.<br>
@@ -837,21 +931,21 @@ function renderMore(){
 
   // Cloud sync
   const cfg=loadSbCfg()||{};
-  const sync=el(`<div class="card"><h2>☁️ Cloud sync <span class="tag">${sbStatus}</span></h2>
-    <p class="small muted">Sync phone ⇄ laptop in real time. Use the SAME Sync ID on every device. Setup steps in README.md.</p>
+  const sync=el(`<div class="card"><h2>☁️ Family cloud sync <span class="tag">${sbStatus}</span></h2>
+    <p class="small muted">Everyone in the family uses the SAME URL, key & <b>Family Sync ID</b> on their own phone. All members + data sync centrally. Setup in README.md.</p>
     <label class="field"><span>Supabase URL</span><input id="sb-url" placeholder="https://xxxx.supabase.co" value="${esc(cfg.url||'')}"></label>
     <label class="field"><span>Supabase anon key</span><input id="sb-key" placeholder="eyJ…" value="${esc(cfg.key||'')}"></label>
-    <label class="field"><span>Sync ID (shared, private)</span><input id="sb-uk" value="${esc(s.userKey)}"></label>
+    <label class="field"><span>Family Sync ID (shared, private)</span><input id="sb-uk" value="${esc(state.familyKey)}"></label>
     <div class="row" style="gap:.5rem"><button class="btn primary grow" id="sbSave">Save & connect</button><button class="btn grow" id="sbPush">Push all</button></div>
     <button class="btn ghost danger" id="sbOff" style="margin-top:.5rem">Disconnect</button></div>`);
   $('#sbSave',sync).onclick=()=>{ let url=$('#sb-url',sync).value.trim(),key=$('#sb-key',sync).value.trim(),nk=$('#sb-uk',sync).value.trim();
     if(!url||!key){toast('Enter URL + key');return;}
-    url=url.replace(/\/+$/,'');                                   // strip trailing slash
+    url=url.replace(/\/+$/,'');
     if(!/^https:\/\/[a-z0-9-]+\.supabase\.(co|in)$/i.test(url)){ toast('URL must be like https://xxxx.supabase.co (no path/title)','⚠️'); return; }
     if(!/^eyJ[\w-]+\.[\w-]+\.[\w-]+$/.test(key)){ toast('That doesn’t look like the anon key (eyJ…). Use Settings → API.','⚠️'); return; }
-    if(nk&&nk!==s.userKey){s.userKey=nk;touchMeta();}
+    if(nk&&nk!==state.familyKey){ state.familyKey=nk; saveLocal(); }
     localStorage.setItem(SB_KEY,JSON.stringify({url,key})); toast('Connecting…'); if(sb){try{sb.removeAllChannels();}catch(e){}} sb=null; initSync(true);
-    setTimeout(()=>{ fullPushAll().then(()=>{ if(sb&&sbStatus!=='err') toast('Connected & data pushed ✓','☁️'); }); render(); },1800); };
+    setTimeout(()=>{ fullPushAll().then(()=>{ if(sb&&sbStatus!=='err') toast('Connected & synced ✓','☁️'); }); render(); },1800); };
   $('#sbPush',sync).onclick=()=>fullPushAll().then(()=>toast('Pushed','☁️'));
   $('#sbOff',sync).onclick=()=>{ localStorage.removeItem(SB_KEY); if(sb){try{sb.removeAllChannels();}catch(e){}} sb=null; setSyncUI('local'); render(); };
   frag.append(sync);
@@ -879,6 +973,17 @@ function renderMore(){
   drawLib($('#libList',libCard)); $('#addLib',libCard).onclick=()=>customFood('',nf=>{ state.meta.library.push({id:uid(),cat:'snack',name:nf.name,p:nf.p,c:nf.c,f:nf.f,kcal:nf.kcal}); touchMeta(); render(); });
   frag.append(libCard);
 
+  // Recipes / meals
+  const recipes=state.meta.recipes||[];
+  const recCard=el(`<div class="card"><div class="row spread"><h2>🍲 My meals</h2><button class="btn sm" id="newRec">+ New meal</button></div>
+    <p class="small muted">Combine foods into a meal, then log the whole thing in one tap from the food search.</p><div id="recList"></div></div>`);
+  const rl=$('#recList',recCard);
+  if(!recipes.length) rl.append(el('<div class="small faint" style="padding:.4rem 0">No meals yet. Build one to log faster.</div>'));
+  recipes.forEach(rp=>{ const t=recipeTotals(rp.items); const row=el(`<div class="libitem"><span class="nm">${esc(rp.name)} <span class="faint">· ${rp.items.length} items</span></span><span class="mac">${Math.round(t.p)}g · ${Math.round(t.kcal)}</span><span class="x faint">✏️</span><span class="rm faint">✕</span></div>`);
+    $('.x',row).onclick=()=>openRecipeBuilder(rp); $('.rm',row).onclick=()=>{ if(confirm('Delete meal "'+rp.name+'"?')){ state.meta.recipes=recipes.filter(x=>x!==rp); touchMeta(); render(); } }; rl.append(row); });
+  $('#newRec',recCard).onclick=()=>openRecipeBuilder();
+  frag.append(recCard);
+
   // Data
   const data=el(`<div class="card"><h2>💾 Backup & data</h2>
     <div class="row wrap" style="gap:.5rem"><button class="btn grow" id="exp">Export backup</button><button class="btn grow" id="imp">Import</button></div>
@@ -903,8 +1008,122 @@ function editLib(it){ openModal(`<h2>Edit food</h2>
   <div class="row" style="gap:.5rem"><label class="field grow"><span>Carb g</span><input id="e-c" type="number" value="${it.c??''}"></label><label class="field grow"><span>Fat g</span><input id="e-f" type="number" value="${it.f??''}"></label></div>
   <div class="row"><button class="btn grow" id="e-x">Cancel</button><button class="btn primary grow" id="e-ok">Save</button></div>`);
   $('#e-x').onclick=closeModal; $('#e-ok').onclick=()=>{ it.name=$('#e-name').value.trim()||it.name; it.p=+$('#e-p').value||0; it.kcal=+$('#e-k').value||0; it.c=$('#e-c').value?+$('#e-c').value:null; it.f=$('#e-f').value?+$('#e-f').value:null; touchMeta(); closeModal(); render(); }; }
-function exportData(){ const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`anbu-tracker-${TODAY}.json`; a.click(); toast('Backup downloaded','💾'); }
-function importData(e){ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{ try{ const s=JSON.parse(r.result); if(!s.meta||!s.days)throw 0; if(confirm('Import backup? Replaces current data.')){ state=migrate(s); saveLocal(); if(sb)fullPushAll(); toast('Imported','✅'); render(); } }catch(err){ alert('Invalid backup file.'); } }; r.readAsText(f); }
+function exportData(){ const out={familyKey:state.familyKey,familyName:state.familyName,rosterUpdatedAt:state.rosterUpdatedAt,activeId:state.activeId,roster:state.roster,members:state.members};
+  const blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`family-tracker-${TODAY}.json`; a.click(); toast('Backup downloaded','💾'); }
+function importData(e){ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{ try{ const s=JSON.parse(r.result); if(!s.members && !(s.meta&&s.days))throw 0; if(confirm('Import backup? Replaces current data.')){ state=migrate(s); applyTheme(); saveLocal(); if(sb)fullPushAll(); toast('Imported','✅'); render(); } }catch(err){ alert('Invalid backup file.'); } }; r.readAsText(f); }
+
+/* =====================================================================
+   FAMILY / MEMBERS
+   ===================================================================== */
+function membersToday(id){ const m=state.members[id]; if(!m)return null; const t=totalsFor(m,TODAY); return {p:t.p,kcal:t.kcal,kt:m.meta.settings.kcalTarget,pt:m.meta.settings.proteinTarget,streak:streakForM(m),onTarget:onTargetForM(m,TODAY)}; }
+function openMemberSheet(){
+  openModal(`<h2>${esc(state.familyName)}</h2><div class="small muted" style="margin-bottom:.6rem">Switch member or view the whole family.</div><div id="mlist"></div>
+    <div class="row" style="gap:.5rem;margin-top:.7rem"><button class="btn grow" id="famView">👨‍👩‍👧 Family overview</button><button class="btn primary grow" id="addM">+ Add member</button></div>
+    <button class="btn ghost" id="manageM" style="width:100%;margin-top:.5rem">Manage members & family name</button>`);
+  const ml=$('#mlist');
+  for(const r of state.roster){ const t=membersToday(r.id),active=r.id===state.activeId;
+    const row=el(`<div class="mrow ${active?'on':''}"><span class="ava" style="background:${r.color}">${r.emoji}</span>
+      <div class="grow"><div class="mn">${esc(r.name)}${active?' <span class="tag">you</span>':''}</div><div class="small faint">${t?`${t.kcal}/${t.kt} kcal · ${t.p}g protein · 🔥${t.streak}`:'no data yet'}</div></div>
+      ${active?'<span class="accent">●</span>':'<span class="small faint">switch ›</span>'}</div>`);
+    row.onclick=()=>{ if(!active)setActive(r.id); closeModal(); }; ml.append(row); }
+  $('#famView').onclick=()=>{ closeModal(); curTab='family'; render(); };
+  $('#addM').onclick=addMember;
+  $('#manageM').onclick=manageMembers;
+}
+function addMember(){
+  const color=MEMBER_COLORS[state.roster.length%MEMBER_COLORS.length]; let chosen=MEMBER_EMOJI[state.roster.length%MEMBER_EMOJI.length];
+  openModal(`<h2>+ Add family member</h2>
+    <label class="field"><span>Name</span><input id="am-n" placeholder="e.g. Priya"></label>
+    <label class="field"><span>Pick an avatar</span><div class="emoji-pick" id="am-emoji"></div></label>
+    <div class="row" style="gap:.5rem"><label class="field grow"><span>Height (cm)</span><input id="am-h" type="number" value="165"></label><label class="field grow"><span>Age</span><input id="am-age" type="number" value="30"></label></div>
+    <div class="row" style="gap:.5rem"><label class="field grow"><span>Weight (kg)</span><input id="am-sw" type="number" step="0.1" value="70"></label><label class="field grow"><span>Goal weight</span><input id="am-tw" type="number" step="0.1" value="62"></label></div>
+    <label class="field"><span>Sex (for calorie estimate)</span><select id="am-sex"><option value="male">Male</option><option value="female" selected>Female</option></select></label>
+    <div class="row"><button class="btn grow" id="am-x">Cancel</button><button class="btn primary grow" id="am-ok">Add member</button></div>`);
+  const ep=$('#am-emoji'); MEMBER_EMOJI.concat(['🧒','👶','👩','👨','🧓','🏋️','🚴']).forEach(e=>{ const b=el(`<button class="ebtn ${e===chosen?'on':''}">${e}</button>`); b.onclick=()=>{chosen=e;$$('.ebtn',ep).forEach(x=>x.classList.toggle('on',x===b));}; ep.append(b); });
+  $('#am-x').onclick=openMemberSheet;
+  $('#am-ok').onclick=()=>{ const name=$('#am-n').value.trim()||'Member',id=uid(),m=defaultMemberData(name);
+    const s=m.meta.settings; s.heightCm=+$('#am-h').value||165; s.age=+$('#am-age').value||30; s.startWeight=+$('#am-sw').value||70; s.targetWeight=+$('#am-tw').value||62; s.sex=$('#am-sex').value; s.onboarded=true; computeTargetsFor(m);
+    state.members[id]=m; state.roster.push({id,name,emoji:chosen,color}); touchRoster(); schedulePush('meta:'+id); setActive(id); toast('Added '+name,'🎉'); confetti(); };
+}
+function manageMembers(){
+  openModal(`<h2>Manage family</h2><label class="field"><span>Family name</span><input id="fn" value="${esc(state.familyName)}"></label><div id="mgList"></div><button class="btn ghost" id="mgClose" style="width:100%;margin-top:.6rem">Done</button>`);
+  $('#fn').onchange=e=>{ state.familyName=e.target.value.trim()||'My Family'; touchRoster(); };
+  const ml=$('#mgList');
+  for(const r of state.roster){ const row=el(`<div class="mrow"><span class="ava" style="background:${r.color}">${r.emoji}</span><input class="grow rn" value="${esc(r.name)}" style="margin:0"><button class="btn sm danger del">Remove</button></div>`);
+    $('.rn',row).onchange=e=>{ r.name=e.target.value.trim()||r.name; if(state.members[r.id])state.members[r.id].meta.settings.name=r.name; touchRoster(); schedulePush('meta:'+r.id); };
+    $('.del',row).onclick=()=>{ if(state.roster.length<=1){toast('Need at least one member');return;} if(confirm('Remove '+r.name+'?')){ state.roster=state.roster.filter(x=>x.id!==r.id); delete state.members[r.id]; if(state.activeId===r.id)state.activeId=state.roster[0].id; touchRoster(); setActive(state.activeId); } };
+    ml.append(row); }
+  $('#mgClose').onclick=closeModal;
+}
+function renderFamily(){
+  const frag=document.createDocumentFragment();
+  frag.append(el(`<div class="row spread"><h1>👨‍👩‍👧 ${esc(state.familyName)}</h1><button class="btn sm ghost" id="backT">‹ Back</button></div>`));
+  let totOT=0,totWO=0,totLost=0,n=0;
+  for(const r of state.roster){ const m=state.members[r.id]; if(!m)continue; n++;
+    let ot=0,wo=0; for(let i=0;i<7;i++){const k=addDays(TODAY,-i); if(onTargetForM(m,k))ot++; const d=m.days[k]; if(d&&d.gym&&d.gym.done)wo++;}
+    totOT+=ot; totWO+=wo; totLost+=Math.round((m.meta.settings.startWeight-latestWeightFor(m))*10)/10; }
+  frag.append(el(`<div class="card insights"><h3 style="color:var(--text)">This week · whole family</h3><div class="ins-grid">
+    <div class="ins"><div class="iv">${n}</div><div class="il">members</div></div>
+    <div class="ins"><div class="iv">${totOT}</div><div class="il">on-target days</div></div>
+    <div class="ins"><div class="iv">${totWO}</div><div class="il">workouts</div></div>
+    <div class="ins"><div class="iv">${totLost>0?'▼':''}${Math.round(Math.abs(totLost)*10)/10}kg</div><div class="il">combined lost</div></div>
+  </div></div>`));
+  const cards=el('<div class="fam-cards"></div>');
+  for(const r of state.roster){ const m=state.members[r.id]; if(!m)continue;
+    const t=totalsFor(m,TODAY),s=m.meta.settings,lost=Math.round((s.startWeight-latestWeightFor(m))*10)/10;
+    let ot=0,wo=0; for(let i=0;i<7;i++){const k=addDays(TODAY,-i); if(onTargetForM(m,k))ot++; const d=m.days[k]; if(d&&d.gym&&d.gym.done)wo++;}
+    const kPct=Math.min(100,Math.round(t.kcal/(s.kcalTarget||1)*100)),pPct=Math.min(100,Math.round(t.p/(s.proteinTarget||1)*100));
+    const card=el(`<div class="fam-card" style="--mc:${r.color}">
+      <div class="row" style="gap:.6rem;align-items:center"><span class="ava lg" style="background:${r.color}">${r.emoji}</span>
+        <div class="grow"><div class="fc-name">${esc(r.name)}${r.id===state.activeId?' <span class="tag">you</span>':''}</div><div class="small faint">${latestWeightFor(m)}kg → ${s.targetWeight}kg${lost>0?` · ▼${lost}kg`:''}</div></div>
+        <div class="streak ${streakForM(m)>0?'lit':''}" style="cursor:default;padding:.15rem .45rem"><span class="fl">🔥</span><span class="num">${streakForM(m)}</span></div></div>
+      <div class="fc-bars">
+        <div class="fc-b"><div class="fc-l"><span>Protein</span><span>${t.p}/${s.proteinTarget}g</span></div><div class="mb p"><span style="width:${pPct}%"></span></div></div>
+        <div class="fc-b"><div class="fc-l"><span>Calories</span><span>${t.kcal}/${s.kcalTarget}</span></div><div class="mb c"><span style="width:${kPct}%"></span></div></div></div>
+      <div class="fc-foot small"><span>${ot}/7 on-target</span><span>${wo} workouts</span><span>${onTargetForM(m,TODAY)?'✅ on track':'logging…'}</span></div></div>`);
+    card.onclick=()=>{ if(r.id!==state.activeId)setActive(r.id); else {curTab='today';render();} };
+    cards.append(card);
+  }
+  frag.append(cards);
+  const board=state.roster.map(r=>({r,streak:streakForM(state.members[r.id]||{days:{}})})).sort((a,b)=>b.streak-a.streak);
+  const lb=el('<div class="card"><h3 style="color:var(--text)">🏆 Streak leaderboard</h3></div>');
+  board.forEach((b,i)=>lb.append(el(`<div class="row spread" style="padding:.45rem 0;border-bottom:1px solid var(--line)"><span>${['🥇','🥈','🥉'][i]||(i+1)+'.'} ${b.r.emoji} ${esc(b.r.name)}</span><span class="accent">🔥 ${b.streak}</span></div>`)));
+  frag.append(lb);
+  frag.append(el('<div class="center small faint" style="padding:.5rem">Tap a member card to switch to them.</div>'));
+  $('#backT',frag).onclick=()=>{curTab='today';render();};
+  return frag;
+}
+
+/* =====================================================================
+   RECIPES / MEALS (combine foods → log in one tap)
+   ===================================================================== */
+function recipeTotals(items){ return items.reduce((a,it)=>({p:a.p+(it.p||0)*(it.qty||1),c:a.c+(it.c||0)*(it.qty||1),f:a.f+(it.f||0)*(it.qty||1),kcal:a.kcal+(it.kcal||0)*(it.qty||1)}),{p:0,c:0,f:0,kcal:0}); }
+function openRecipeBuilder(existing){
+  const r=existing?clone(existing):{id:uid(),name:'',items:[]};
+  function redraw(){ const t=recipeTotals(r.items);
+    openModal(`<h2>${existing?'Edit':'New'} meal</h2>
+      <label class="field"><span>Meal name</span><input id="rb-n" value="${esc(r.name)}" placeholder="e.g. Power breakfast"></label>
+      <div class="small muted" style="margin-bottom:.4rem">Foods (${r.items.length})</div><div id="rb-items"></div>
+      <button class="btn sm" id="rb-add" style="margin:.4rem 0">+ Add food</button>
+      <div class="card tight prevbox"><div class="row spread"><b style="color:var(--protein)">${Math.round(t.p)}g protein</b><span><b>${Math.round(t.kcal)}</b> kcal</span></div></div>
+      <div class="row" style="margin-top:.7rem"><button class="btn grow" id="rb-x">Cancel</button><button class="btn primary grow" id="rb-save">Save meal</button></div>`);
+    const box=$('#rb-items');
+    r.items.forEach(it=>{ const row=el(`<div class="logitem"><span class="nm">${esc(it.name)}</span><span class="mac">${Math.round(it.p||0)}g · ${Math.round(it.kcal||0)}</span><span class="x">✕</span></div>`); $('.x',row).onclick=()=>{ r.name=$('#rb-n').value; r.items=r.items.filter(x=>x!==it); redraw(); }; box.append(row); });
+    $('#rb-add').onclick=()=>{ r.name=$('#rb-n').value; recipeFoodPick(food=>{ r.items.push(food); redraw(); }); };
+    $('#rb-x').onclick=()=> existing?closeModal():(curTab==='more'?render():closeModal());
+    $('#rb-save').onclick=()=>{ r.name=$('#rb-n').value.trim()||'My meal'; const t2=recipeTotals(r.items); r.p=t2.p;r.c=t2.c;r.f=t2.f;r.kcal=t2.kcal;
+      const arr=state.meta.recipes||(state.meta.recipes=[]); const i=arr.findIndex(x=>x.id===r.id); if(i>=0)arr[i]=r; else arr.push(r); touchMeta(); closeModal(); toast('Meal saved','🍲'); if(curTab==='more')render(); };
+  }
+  redraw();
+}
+function recipeFoodPick(cb){
+  openModal(`<div class="picker-search"><h2>Add food to meal</h2><input id="rs" placeholder="Search foods…"></div><div id="rlist"></div>`);
+  const list=$('#rlist'),search=$('#rs');
+  function draw(){ const res=searchFoods(search.value); list.innerHTML='';
+    for(const r of res.slice(0,50)){ const row=el(`<div class="pickitem"><div class="grow"><div class="nm">${esc(r.name)}</div><div class="small faint">${r.serv?esc(r.serv)+' · ':''}${r.kcal} kcal</div></div><span class="mac">${r.p}g</span></div>`);
+      row.onclick=()=>cb({name:r.name,p:r.p,c:r.c,f:r.f,kcal:r.kcal,qty:1}); list.append(row); } }
+  search.oninput=draw; draw(); setTimeout(()=>search.focus(),50);
+}
 
 /* =====================================================================
    MODAL

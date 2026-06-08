@@ -362,6 +362,47 @@ h1{font-weight:800;letter-spacing:-.025em;font-size:1.35rem}
 /* portion sheet segment reuse */
 .seg button{font-weight:600}
 
+/* ===================== v4 family / members ===================== */
+.accent{color:var(--accent)}
+/* header member chip */
+#memberHost{margin-left:auto}
+.member-chip{display:flex;align-items:center;gap:.4rem;background:var(--surface2);border:1px solid var(--line);border-radius:30px;padding:.25rem .5rem .25rem .3rem;cursor:pointer;color:var(--text)}
+.member-chip:active{transform:scale(.96)}
+.ava{width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.95rem;flex:0 0 auto;color:#06210f}
+.ava.lg{width:42px;height:42px;font-size:1.4rem}
+.member-chip .mc-name{font-size:.82rem;font-weight:600;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.member-chip .car{color:var(--muted);font-size:.7rem}
+.sync-dot{margin-left:.5rem}
+/* member rows in sheet */
+.mrow{display:flex;align-items:center;gap:.6rem;padding:.55rem .3rem;border-bottom:1px solid var(--line)}
+.mrow.on{background:color-mix(in srgb,var(--accent) 8%,transparent);border-radius:10px}
+.mrow .mn{font-weight:600;font-size:.9rem}
+.mrow .rn{font-size:.9rem}
+/* emoji picker */
+.emoji-pick{display:flex;flex-wrap:wrap;gap:.4rem}
+.ebtn{width:42px;height:42px;border-radius:12px;border:1px solid var(--line);background:var(--surface2);font-size:1.3rem;cursor:pointer}
+.ebtn.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--surface2))}
+/* family dashboard cards */
+.fam-cards{display:flex;flex-direction:column;gap:.8rem;margin-bottom:1rem}
+.fam-card{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--mc);border-radius:var(--radius);padding:.9rem;box-shadow:var(--shadow);cursor:pointer;transition:transform .1s}
+.fam-card:active{transform:scale(.99)}
+.fam-card .fc-name{font-weight:700}
+.fam-card .fc-bars{display:flex;gap:.8rem;margin:.7rem 0 .5rem}
+.fc-b{flex:1}
+.fc-b .fc-l{display:flex;justify-content:space-between;font-size:.72rem;color:var(--muted);margin-bottom:.25rem}
+.fc-b .mb{height:7px;border-radius:6px;background:var(--surface2);overflow:hidden}
+.fc-b .mb>span{display:block;height:100%;border-radius:6px;transition:width .5s}
+.fc-b .mb.p>span{background:var(--protein)} .fc-b .mb.c>span{background:var(--kcal)}
+.fc-foot{display:flex;justify-content:space-between;color:var(--muted)}
+.recent-chip.meal{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));background:color-mix(in srgb,var(--accent) 8%,var(--surface2))}
+
+/* light-theme polish */
+html[data-theme="light"] .mission{background:linear-gradient(160deg,#ffffff,#f3f7fb)}
+html[data-theme="light"] .card.hero{background:linear-gradient(165deg,#f0fbf6,#ffffff)}
+html[data-theme="light"] .ring-bg,html[data-theme="light"] .calring .ring-bg{stroke:#e7edf4}
+html[data-theme="light"] .logo{box-shadow:0 4px 12px rgba(16,185,126,.3)}
+html[data-theme="light"] .win{background:#fff}
+
 /* ===== v2.1 UX upgrades ===== */
 /* greeting / context banner */
 .banner{border-radius:12px;padding:.6rem .8rem;font-size:.86rem;margin-bottom:.8rem;border:1px solid var(--line)}

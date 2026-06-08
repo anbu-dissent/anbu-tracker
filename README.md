@@ -5,6 +5,13 @@ A personal, mobile + laptop meal-planning and macro/gym tracker built from
 app) with optional **real-time cloud sync** so your phone and laptop stay in
 sync automatically.
 
+## What's new in v4 — Family mode 👨‍👩‍👧
+- **Multiple members** under one family. Tap the member chip in the header to **switch member**, **add members** (each with their own goals, plan, library, streak & rewards), or open **Family overview**.
+- **Family dashboard** — every member's today snapshot (protein/calorie bars, streak), aggregate weekly stats (on-target days, workouts, combined weight lost), and a **streak leaderboard**.
+- **Central sync** — everyone uses the same Supabase URL/key + **Family Sync ID** on their own phone; all members and data sync to one place in real time. **No new database setup needed** — the existing schema already supports it.
+- **Exercise & calories burned** — log workout calories (or auto-estimate), optionally added back to that day's budget (MyFitnessPal-style).
+- **Recipes / meals** — combine foods into a saved meal and log the whole thing in one tap.
+
 ## What's new in v3
 - **Redesigned UI** — Inter typography, refreshed palette + gradients, **light/dark theme** (More → Appearance), custom SVG tab icons, and an animated **calorie + macro hero** (remaining-calories ring + Protein/Carbs/Fat bars) like MyFitnessPal / MacroFactor.
 - **270-food database** (vegetables-heavy) with **type-ahead ranking**, **⭐ favorites**, **⚡ quick-add** (calories/protein only), **grams ⇄ servings** macro scaling, and **📷 barcode scanning** (native on Android) → auto-fills macros from Open Food Facts.

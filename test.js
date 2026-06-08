@@ -102,6 +102,37 @@ window.__r = (function(){
     ok(typeof quickAdd==='function' && typeof barcodeScan==='function' && typeof macroHero==='function' && typeof openOnboarding==='function', 'v3 functions defined');
     // 20) theme
     S().theme='light'; applyTheme(); ok(document.documentElement.dataset.theme==='light','theme applies'); S().theme='dark'; applyTheme();
+    // 21) v4 family: structure
+    ok(!!state.familyKey && !!state.activeId && !!state.members[state.activeId], 'family state present');
+    ok(state.roster.length===1, 'starts with 1 member');
+    ok(state.meta===state.members[state.activeId].meta, 'active meta is a live pointer');
+    // add a member
+    const rosterN=state.roster.length;
+    const nid=uid(); const nm=defaultMemberData('Priya'); nm.meta.settings.startWeight=70; nm.meta.settings.heightCm=165; nm.meta.settings.targetWeight=60; nm.meta.settings.onboarded=true; computeTargetsFor(nm);
+    state.members[nid]=nm; state.roster.push({id:nid,name:'Priya',emoji:'🏃',color:'#38bdf8'});
+    ok(state.roster.length===rosterN+1, 'member added');
+    ok(nm.meta.settings.proteinTarget>0 && nm.meta.settings.kcalTarget>0, 'new member targets computed');
+    // switch active and back; data isolation
+    const firstId=state.activeId;
+    addLog(TODAY,'lunch',{name:'Member A food',p:40,c:0,f:0,kcal:300},1);
+    const aProtein=dayTotals(TODAY).p;
+    setActive(nid);
+    ok(state.activeId===nid && dayTotals(TODAY).p!==aProtein, 'switching member isolates data');
+    addLog(TODAY,'lunch',{name:'Member B food',p:10,c:0,f:0,kcal:120},1);
+    ok(dayTotals(TODAY).p>=10, 'logged to member B');
+    setActive(firstId);
+    ok(dayTotals(TODAY).p===aProtein, 'member A data intact after round-trip');
+    // member-scoped helpers
+    ok(typeof totalsFor==='function' && totalsFor(state.members[nid],TODAY).p>=10, 'totalsFor works per member');
+    ok(typeof renderFamily==='function','family view defined');
+    curTab='family'; let famThrew=false; try{ render(); }catch(e){ famThrew=true; R.fail.push('renderFamily: '+e.message); } ok(!famThrew,'family view renders'); curTab='today';
+    // 22) exercise + recipes
+    ok(typeof estBurn==='function' && estBurn('Gym',60)>0, 'exercise burn estimate');
+    state.meta.recipes.push({id:uid(),name:'Test meal',items:[{name:'a',p:20,c:5,f:2,kcal:150,qty:1},{name:'b',p:10,c:0,f:0,kcal:60,qty:1}]});
+    ok(recipeTotals(state.meta.recipes[0].items).p===30, 'recipe totals sum');
+    // 23) persistence excludes pointer duplication
+    saveLocal(); const saved=JSON.parse(localStorage.getItem('anbu_tracker_v1')); ok(!saved.meta && !saved.days && !!saved.members, 'saved state has no pointer dup');
+    const reload=migrate(JSON.parse(JSON.stringify(saved))); ok(reload.meta===reload.members[reload.activeId].meta, 'reload re-links active pointer');
     curTab='today'; render();
   } catch(e){ R.fail.push('FATAL: '+e.message+' '+(e.stack||'').split('\\n')[1]); }
   return R;
