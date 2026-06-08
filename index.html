@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Anbu Tracker">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>Anbu • Protein Tracker</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="app">
+  <div>
+    <div class="title">💪 Anbu Tracker</div>
+    <div class="sub" id="headerSub">High-protein • eggetarian</div>
+  </div>
+  <div class="sync-dot" id="syncDot" title="Sync status">
+    <span class="dot"></span><span class="lbl">local</span>
+  </div>
+</header>
+
+<main id="view"><!-- rendered by app.js --></main>
+
+<nav class="tabbar" id="tabbar">
+  <button data-tab="today"    class="active"><span class="ic">📋</span>Today</button>
+  <button data-tab="week"><span class="ic">🗓️</span>Week</button>
+  <button data-tab="shop"><span class="ic">🛒</span>Shopping</button>
+  <button data-tab="dash"><span class="ic">📊</span>Stats</button>
+  <button data-tab="more"><span class="ic">⚙️</span>More</button>
+</nav>
+
+<div id="modalRoot"></div>
+<div class="toast" id="toast"></div>
+
+<!-- Libs (CDN). App works offline once cached by the service worker. -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7/dist/umd/supabase.min.js"></script>
+
+<script src="data.js"></script>
+<script src="foods-db.js"></script>
+<script src="app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "Anbu Protein Tracker",
+  "short_name": "Anbu Tracker",
+  "description": "High-protein eggetarian meal planning & gym/macro tracker",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f1115",
+  "theme_color": "#0f1115",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
