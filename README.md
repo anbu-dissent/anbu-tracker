@@ -5,6 +5,11 @@ A personal, mobile + laptop meal-planning and macro/gym tracker built from
 app) with optional **real-time cloud sync** so your phone and laptop stay in
 sync automatically.
 
+## What's new in v3
+- **Redesigned UI** — Inter typography, refreshed palette + gradients, **light/dark theme** (More → Appearance), custom SVG tab icons, and an animated **calorie + macro hero** (remaining-calories ring + Protein/Carbs/Fat bars) like MyFitnessPal / MacroFactor.
+- **270-food database** (vegetables-heavy) with **type-ahead ranking**, **⭐ favorites**, **⚡ quick-add** (calories/protein only), **grams ⇄ servings** macro scaling, and **📷 barcode scanning** (native on Android) → auto-fills macros from Open Food Facts.
+- **First-run onboarding** that calculates your fat-loss targets, and a **weekly insights** card on Stats.
+
 ## What it does (v2)
 - **Today** — a gamified **Mission card** (streak flame, XP/level, next-treat countdown, daily wins) + protein/calorie/water **progress rings**. **One-tap food logging** with a smart search over **180+ foods that auto-fill macros** (offline DB + online lookup via Open Food Facts), a **recents quick-add** strip, and **"✓ Ate the plan"** per meal. Daily **habit chips**, gym log, body weight, notes. Confetti + floating **+XP** + **Undo** on actions.
 - **Reward system** — earn **XP & levels**, a forgiving **logging streak**, **achievement badges**, and **cheat-meal / treat unlocks** ("3 more on-target days → Cheat Meal 🍕") that you redeem and re-earn. Designed to pull you back daily (streak-at-risk nudges, evening prompts).
