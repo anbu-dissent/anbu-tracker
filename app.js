@@ -197,10 +197,11 @@ function confetti(big){
 let sb=null,sbCfg=null,sbStatus='local',pushQ=new Set(),pushTimer=null;
 function loadSbCfg(){ try{ return JSON.parse(localStorage.getItem(SB_KEY)||'null'); }catch(e){ return null; } }
 function setSyncUI(s){ sbStatus=s; const d=$('#syncDot'); if(!d)return; d.className='sync-dot'+(s==='on'?' on':s==='err'?' err':s==='sync'?' sync':''); $('.lbl',d).textContent=s==='on'?'synced':s==='sync'?'syncing…':s==='err'?'error':'local'; }
-function initSync(){ sbCfg=loadSbCfg(); if(!sbCfg||!sbCfg.url||!sbCfg.key||!window.supabase){ setSyncUI('local'); return; }
+function initSync(loud){ sbCfg=loadSbCfg(); if(!sbCfg||!sbCfg.url||!sbCfg.key){ setSyncUI('local'); return; }
+  if(!window.supabase){ setSyncUI('err'); if(loud)toast('Sync library not loaded — check internet, then reconnect','⚠️'); return; }
   try{ sb=window.supabase.createClient(sbCfg.url,sbCfg.key,{realtime:{params:{eventsPerSecond:3}}}); setSyncUI('sync');
-    pullAll().then(()=>{subscribeRealtime();setSyncUI('on');}).catch(e=>{console.error(e);setSyncUI('err');}); }
-  catch(e){ console.error(e); setSyncUI('err'); } }
+    pullAll().then(()=>{subscribeRealtime();setSyncUI('on');}).catch(e=>{console.error(e);setSyncUI('err');toast('Sync error: '+(e.message||e.code||e),'⚠️');}); }
+  catch(e){ console.error(e); setSyncUI('err'); toast('Connect failed: '+(e.message||e),'⚠️'); } }
 const uk=()=>S().userKey;
 async function pullAll(){ if(!sb)return;
   const {data:meta,error:e1}=await sb.from('app_meta').select('*').eq('user_key',uk()).maybeSingle();
@@ -218,8 +219,8 @@ function schedulePush(w){ if(!sb)return; pushQ.add(w); setSyncUI('sync'); clearT
 async function flushPush(){ if(!sb)return; const jobs=[...pushQ]; pushQ.clear();
   try{ for(const j of jobs){ if(j==='meta') await sb.from('app_meta').upsert({user_key:uk(),updated_at:state.meta.updatedAt,payload:state.meta},{onConflict:'user_key'});
     else if(j.startsWith('day:')){ const k=j.slice(4),d=state.days[k]; if(d) await sb.from('app_days').upsert({user_key:uk(),date:k,updated_at:d.updatedAt,payload:d},{onConflict:'user_key,date'}); } }
-    setSyncUI('on'); }catch(e){ console.error(e); setSyncUI('err'); } }
-async function fullPushAll(){ if(!sb)return; pushQ.add('meta'); Object.keys(state.days).forEach(k=>pushQ.add('day:'+k)); await flushPush(); }
+    setSyncUI('on'); }catch(e){ console.error(e); setSyncUI('err'); toast('Push failed: '+(e.message||e.code||(e&&e.details)||JSON.stringify(e)),'⚠️'); } }
+async function fullPushAll(){ if(!sb){ toast('Not connected — Save & connect first','⚠️'); return; } pushQ.add('meta'); Object.keys(state.days).forEach(k=>pushQ.add('day:'+k)); await flushPush(); }
 
 /* =====================================================================
    ROUTER
@@ -752,9 +753,14 @@ function renderMore(){
     <label class="field"><span>Sync ID (shared, private)</span><input id="sb-uk" value="${esc(s.userKey)}"></label>
     <div class="row" style="gap:.5rem"><button class="btn primary grow" id="sbSave">Save & connect</button><button class="btn grow" id="sbPush">Push all</button></div>
     <button class="btn ghost danger" id="sbOff" style="margin-top:.5rem">Disconnect</button></div>`);
-  $('#sbSave',sync).onclick=()=>{ const url=$('#sb-url',sync).value.trim(),key=$('#sb-key',sync).value.trim(),nk=$('#sb-uk',sync).value.trim();
-    if(nk&&nk!==s.userKey){s.userKey=nk;touchMeta();} if(!url||!key){toast('Enter URL + key');return;}
-    localStorage.setItem(SB_KEY,JSON.stringify({url,key})); toast('Connecting…'); if(sb){try{sb.removeAllChannels();}catch(e){}} initSync(); setTimeout(()=>fullPushAll(),1500); };
+  $('#sbSave',sync).onclick=()=>{ let url=$('#sb-url',sync).value.trim(),key=$('#sb-key',sync).value.trim(),nk=$('#sb-uk',sync).value.trim();
+    if(!url||!key){toast('Enter URL + key');return;}
+    url=url.replace(/\/+$/,'');                                   // strip trailing slash
+    if(!/^https:\/\/[a-z0-9-]+\.supabase\.(co|in)$/i.test(url)){ toast('URL must be like https://xxxx.supabase.co (no path/title)','⚠️'); return; }
+    if(!/^eyJ[\w-]+\.[\w-]+\.[\w-]+$/.test(key)){ toast('That doesn’t look like the anon key (eyJ…). Use Settings → API.','⚠️'); return; }
+    if(nk&&nk!==s.userKey){s.userKey=nk;touchMeta();}
+    localStorage.setItem(SB_KEY,JSON.stringify({url,key})); toast('Connecting…'); if(sb){try{sb.removeAllChannels();}catch(e){}} sb=null; initSync(true);
+    setTimeout(()=>{ fullPushAll().then(()=>{ if(sb&&sbStatus!=='err') toast('Connected & data pushed ✓','☁️'); }); render(); },1800); };
   $('#sbPush',sync).onclick=()=>fullPushAll().then(()=>toast('Pushed','☁️'));
   $('#sbOff',sync).onclick=()=>{ localStorage.removeItem(SB_KEY); if(sb){try{sb.removeAllChannels();}catch(e){}} sb=null; setSyncUI('local'); render(); };
   frag.append(sync);
